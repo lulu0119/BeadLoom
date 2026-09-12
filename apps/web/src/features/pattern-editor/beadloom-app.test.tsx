@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { AppToaster } from "@/app/app-toaster";
 import i18n, { i18nInitialization, LANGUAGE_STORAGE_KEY } from "@/i18n/config";
 import { PATTERN_LIBRARY_STORAGE_KEY } from "@/lib/pattern-storage";
+import { resetAppStore } from "./app-store";
 import { BeadloomApp } from "./beadloom-app";
 
 const patternCanvasMockContexts: Array<{ font: string }> = [];
@@ -51,6 +52,7 @@ describe("BeadLoom editor shell", () => {
   beforeEach(async () => {
     localStorage.removeItem(LANGUAGE_STORAGE_KEY);
     localStorage.removeItem(PATTERN_LIBRARY_STORAGE_KEY);
+    resetAppStore();
     await i18n.changeLanguage("en");
     patternCanvasMockContexts.length = 0;
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {

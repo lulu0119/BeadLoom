@@ -62,23 +62,17 @@ export function clonePattern(pattern: PatternDocument): PatternDocument {
   };
 }
 
+const toolIcons: Record<EditorTool, LucideIcon> = {
+  pencil: Pencil,
+  eraser: Eraser,
+  eyedropper: Pipette,
+  paintBucket: PaintBucket,
+  hand: Hand,
+  line: Minus
+};
+
 export function getToolIcon(tool: EditorTool): LucideIcon {
-  if (tool === "paintBucket") {
-    return PaintBucket;
-  }
-  if (tool === "eraser") {
-    return Eraser;
-  }
-  if (tool === "eyedropper") {
-    return Pipette;
-  }
-  if (tool === "hand") {
-    return Hand;
-  }
-  if (tool === "line") {
-    return Minus;
-  }
-  return Pencil;
+  return toolIcons[tool];
 }
 
 export function getCanvasCursorClassName(activeTool: EditorTool): string {

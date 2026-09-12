@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { createBlankPattern, resizePattern, type PatternDocument } from "@beadloom/core";
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
+import { createBlankPattern, resizePattern } from "@beadloom/core";
 import { defaultPalette } from "@beadloom/palettes";
 import { FolderOpen, Settings } from "lucide-react";
 import Image from "next/image";
 import { useTranslation } from "react-i18next";
-import { user, type Agent } from "@apeira/core";
 import {
   Button,
   Dialog,
@@ -29,141 +28,56 @@ import {
   createPatternRecordId,
   exportPatternRecordToJson,
   importPatternRecordFromExportJson,
-  loadPatternLibraryFromLocalStorage,
   patternDownloadBasename,
-  savePatternLibraryToLocalStorage,
   triggerBrowserDownload,
-  type PatternLibraryDocument,
   type PatternRecord
 } from "@/lib/pattern-storage";
 import type { AppStatusMessage } from "./app-status-message";
 import { showAppStatusToast } from "./app-status-toast";
-import { createChartAgent, consumeAgentRun } from "./chart-agent";
-import { ChartChatPanel, type ChatLine } from "./chart-chat-panel";
+import { useAppStore } from "./app-store";
+import { ChartChatPanel } from "./chart-chat-panel";
 import { ChartSizeGroup } from "./chart-size-group";
 import { ChartZoomGroup } from "./chart-zoom-group";
 import { DEFAULT_CHART_SIZE, parseChartDimension } from "./chart-size";
 import { ChartWelcome } from "./chart-welcome";
 import { LanguageSwitcher } from "./language-switcher";
-import { defaultLlmSettings, loadLlmSettings, saveLlmSettings, type LlmSettings } from "./llm-settings";
+import { selectActivePattern, selectActiveRecord } from "./library-slice";
 import { PatternEditorWorkspace } from "./pattern-editor-workspace";
 import { PatternLibraryDialog } from "./pattern-library-dialog";
-import { clonePattern } from "./pattern-editor-utils";
-
-function createRecord(pattern: PatternDocument, title: string, id = createPatternRecordId()): PatternRecord {
-  const now = new Date().toISOString();
-  return {
-    id,
-    title,
-    createdAt: now,
-    updatedAt: now,
-    pattern
-  };
-}
-
-function emptyLibrary(): PatternLibraryDocument {
-  return {
-    version: 1,
-    activePatternId: null,
-    patterns: []
-  };
-}
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-        return;
-      }
-      reject(new Error("Could not read image."));
-    };
-    reader.onerror = () => reject(new Error("Could not read image."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function isBrowserBlockedFetch(error: Error): boolean {
-  return (
-    error.name === "TypeError" &&
-    (error.message === "Load failed" ||
-      error.message === "Failed to fetch" ||
-      error.message === "NetworkError when attempting to fetch resource.")
-  );
-}
-
-function agentFailureText(error: unknown, corsMessage: string, fallback: string): string {
-  if (error instanceof Error && isBrowserBlockedFetch(error)) {
-    return corsMessage;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return fallback;
-}
 
 export function BeadloomApp(): ReactElement {
   const { t } = useTranslation();
-  const [library, setLibrary] = useState<PatternLibraryDocument>(emptyLibrary);
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [welcomeOpen, setWelcomeOpen] = useState(true);
-  const [llm, setLlm] = useState<LlmSettings>(defaultLlmSettings);
+  const library = useAppStore((state) => state.library);
+  const libraryOpen = useAppStore((state) => state.libraryOpen);
+  const setLibraryOpen = useAppStore((state) => state.setLibraryOpen);
+  const settingsOpen = useAppStore((state) => state.settingsOpen);
+  const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
+  const welcomeOpen = useAppStore((state) => state.welcomeOpen);
+  const setWelcomeOpen = useAppStore((state) => state.setWelcomeOpen);
+  const hydrated = useAppStore((state) => state.hydrated);
+  const llm = useAppStore((state) => state.llm);
+  const updateLlmField = useAppStore((state) => state.updateLlmField);
+  const saveLlm = useAppStore((state) => state.saveLlm);
+  const zoom = useAppStore((state) => state.zoom);
+  const setZoom = useAppStore((state) => state.setZoom);
+  const persistPattern = useAppStore((state) => state.persistPattern);
+  const addChart = useAppStore((state) => state.addChart);
+  const openPattern = useAppStore((state) => state.openPattern);
+  const deletePattern = useAppStore((state) => state.deletePattern);
+  const duplicatePattern = useAppStore((state) => state.duplicatePattern);
+  const renamePattern = useAppStore((state) => state.renamePattern);
+  const addImportedRecord = useAppStore((state) => state.addImportedRecord);
+  const activeRecord = useAppStore(selectActiveRecord);
+  const pattern = useAppStore(selectActivePattern);
   const [widthDraft, setWidthDraft] = useState(String(DEFAULT_CHART_SIZE));
   const [heightDraft, setHeightDraft] = useState(String(DEFAULT_CHART_SIZE));
-  const [chatLines, setChatLines] = useState<ChatLine[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [attached, setAttached] = useState<File | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [hydrated, setHydrated] = useState(false);
-  const agentRef = useRef<Agent | null>(null);
-  const patternRef = useRef<PatternDocument>(createBlankPattern(DEFAULT_CHART_SIZE, DEFAULT_CHART_SIZE));
-  const activeIdRef = useRef("");
-  const persistPatternRef = useRef<(next: PatternDocument) => void>(() => undefined);
-  const llmRef = useRef(llm);
 
-  const activeRecord = library.patterns.find((record) => record.id === library.activePatternId) ?? library.patterns[0] ?? null;
-  const pattern = activeRecord?.pattern ?? null;
-  const activeChartId = activeRecord?.id;
-  llmRef.current = llm;
   const showWelcome = hydrated && (welcomeOpen || activeRecord === null);
   const showEditor = hydrated && !showWelcome && activeRecord !== null && pattern !== null;
 
   useEffect(() => {
-    setHydrated(true);
-    setLlm(loadLlmSettings());
-    const stored = loadPatternLibraryFromLocalStorage();
-    if (stored !== null && stored.patterns.length > 0) {
-      setLibrary(stored);
-      setWelcomeOpen(false);
-      return;
-    }
-    if (stored !== null) {
-      setLibrary(stored);
-      setWelcomeOpen(true);
-      return;
-    }
-    const empty = emptyLibrary();
-    savePatternLibraryToLocalStorage(empty);
-    setLibrary(empty);
-    setWelcomeOpen(true);
+    useAppStore.getState().hydrateApp();
   }, []);
-
-  useEffect(() => {
-    if (activeRecord === null || activeChartId === undefined) {
-      return;
-    }
-    patternRef.current = activeRecord.pattern;
-    activeIdRef.current = activeChartId;
-  }, [activeChartId]);
-
-  useEffect(() => {
-    if (!hydrated) {
-      return;
-    }
-    savePatternLibraryToLocalStorage(library);
-  }, [hydrated, library]);
 
   const patternWidth = pattern?.width;
   const patternHeight = pattern?.height;
@@ -178,128 +92,6 @@ export function BeadloomApp(): ReactElement {
 
   const paletteMapForExport = useMemo(() => new Map(defaultPalette.map((color) => [color.code, color])), []);
 
-  function persistPattern(next: PatternDocument): void {
-    const chartId = activeIdRef.current;
-    patternRef.current = next;
-    setLibrary((current) => {
-      const matchedId =
-        chartId !== "" && current.patterns.some((record) => record.id === chartId)
-          ? chartId
-          : (current.activePatternId ?? current.patterns[0]?.id ?? "");
-      const matched = matchedId !== "" && current.patterns.some((record) => record.id === matchedId);
-      if (!matched) {
-        return current;
-      }
-      return {
-        ...current,
-        patterns: current.patterns.map((record) =>
-          record.id === matchedId ? { ...record, pattern: next, updatedAt: new Date().toISOString() } : record
-        )
-      };
-    });
-  }
-
-  function updateLlmField(patch: Partial<LlmSettings>): void {
-    setLlm((current) => ({ ...current, ...patch }));
-  }
-
-  function handlePatternChange(next: PatternDocument | ((previous: PatternDocument) => PatternDocument)): void {
-    const resolved = typeof next === "function" ? next(patternRef.current) : next;
-    persistPattern(resolved);
-  }
-
-  persistPatternRef.current = persistPattern;
-
-  async function ensureAgent(): Promise<Agent> {
-    if (agentRef.current !== null) {
-      return agentRef.current;
-    }
-    const agent = await createChartAgent({
-      getPattern: () => patternRef.current,
-      commitPattern: (next) => {
-        persistPatternRef.current(next);
-      },
-      llm: llmRef.current
-    });
-    await agent.init();
-    agentRef.current = agent;
-    return agent;
-  }
-
-  async function handleSend(text: string, imageFile: File | null = attached): Promise<void> {
-    if (llm.apiKey.trim() === "") {
-      setSettingsOpen(true);
-      return;
-    }
-    const trimmed = text.trim();
-    const prompt = trimmed === "" ? t("chat.drawThis") : trimmed;
-    setAttached(null);
-    setChatLines((current) => [...current, { id: createPatternRecordId(), role: "user", text: prompt }]);
-    setBusy(true);
-    const assistantId = createPatternRecordId();
-    setChatLines((current) => [...current, { id: assistantId, role: "assistant", text: "" }]);
-    try {
-      const agent = await ensureAgent();
-      const imageUrl = imageFile === null ? null : await fileToDataUrl(imageFile);
-      const input =
-        imageUrl === null
-          ? user(prompt)
-          : {
-              role: "user" as const,
-              type: "message" as const,
-              content: [
-                { type: "input_text" as const, text: prompt },
-                { type: "input_image" as const, image_url: imageUrl }
-              ]
-            };
-      await consumeAgentRun(agent, input, (event) => {
-        if (event.type === "text.delta" && "delta" in event && typeof event.delta === "string") {
-          setChatLines((current) =>
-            current.map((line) => (line.id === assistantId ? { ...line, text: `${line.text}${event.delta}` } : line))
-          );
-        }
-        if (event.type === "tool-call.start" && "toolName" in event && typeof event.toolName === "string") {
-          setChatLines((current) => [...current, { id: createPatternRecordId(), role: "tool", text: event.toolName }]);
-        }
-        if (event.type === "turn.failed") {
-          const message = agentFailureText(event.error, t("chat.corsBlocked"), t("chat.turnFailed"));
-          setChatLines((current) =>
-            current.map((line) => (line.id === assistantId ? { ...line, text: message } : line))
-          );
-        }
-      });
-    } catch (error) {
-      const message = agentFailureText(error, t("chat.corsBlocked"), t("chat.turnFailed"));
-      setChatLines((current) => [...current, { id: createPatternRecordId(), role: "assistant", text: message }]);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function handleInterrupt(): void {
-    void agentRef.current?.interrupt("user interrupted");
-    setBusy(false);
-  }
-
-  function resetChatSession(): void {
-    agentRef.current = null;
-    setChatLines([]);
-    setAttached(null);
-  }
-
-  function addChart(nextPattern: PatternDocument): void {
-    const record = createRecord(nextPattern, t("library.defaultTitle"));
-    patternRef.current = nextPattern;
-    activeIdRef.current = record.id;
-    resetChatSession();
-    setLibrary((current) => ({
-      version: 1,
-      activePatternId: record.id,
-      patterns: [...current.patterns, record]
-    }));
-    setWelcomeOpen(false);
-  }
-
   function handleStartBlank(width: number, height: number): void {
     setZoom(1);
     addChart(createBlankPattern(width, height));
@@ -311,17 +103,20 @@ export function BeadloomApp(): ReactElement {
   }
 
   function commitSize(): void {
+    if (pattern === null) {
+      return;
+    }
     const width = parseChartDimension(widthDraft);
     const height = parseChartDimension(heightDraft);
     if (width === null || height === null) {
-      setWidthDraft(String(patternRef.current.width));
-      setHeightDraft(String(patternRef.current.height));
+      setWidthDraft(String(pattern.width));
+      setHeightDraft(String(pattern.height));
       return;
     }
-    if (width === patternRef.current.width && height === patternRef.current.height) {
+    if (width === pattern.width && height === pattern.height) {
       return;
     }
-    persistPattern(resizePattern(patternRef.current, width, height));
+    persistPattern(resizePattern(pattern, width, height));
   }
 
   const onAppStatus = useCallback((message: AppStatusMessage) => {
@@ -402,24 +197,8 @@ export function BeadloomApp(): ReactElement {
       {showEditor && pattern !== null && activeRecord !== null ? (
         <PatternEditorWorkspace
           pattern={pattern}
-          zoom={zoom}
           onAppStatus={onAppStatus}
-          onPatternChange={handlePatternChange}
-          overlay={
-            <ChartChatPanel
-              attachedName={attached?.name ?? null}
-              busy={busy}
-              hasApiKey={llm.apiKey.trim() !== ""}
-              lines={chatLines}
-              onAttachFile={setAttached}
-              onClearAttach={() => setAttached(null)}
-              onInterrupt={handleInterrupt}
-              onOpenSettings={() => setSettingsOpen(true)}
-              onSend={(text) => {
-                void handleSend(text);
-              }}
-            />
-          }
+          overlay={<ChartChatPanel />}
         />
       ) : null}
       <PatternLibraryDialog
@@ -427,33 +206,8 @@ export function BeadloomApp(): ReactElement {
         open={libraryOpen}
         patterns={library.patterns}
         onNewChart={handleNewChart}
-        onDeletePattern={(patternId) => {
-          setLibrary((current) => {
-            const patterns = current.patterns.filter((record) => record.id !== patternId);
-            if (patterns.length === 0) {
-              setWelcomeOpen(true);
-              return emptyLibrary();
-            }
-            return {
-              version: 1,
-              activePatternId: current.activePatternId === patternId ? (patterns[0]?.id ?? null) : current.activePatternId,
-              patterns
-            };
-          });
-        }}
-        onDuplicatePattern={(patternId) => {
-          const source = library.patterns.find((record) => record.id === patternId);
-          if (source === undefined) {
-            return;
-          }
-          const copy = createRecord(clonePattern(source.pattern), `${source.title} ${t("library.duplicatedTitleSuffix")}`);
-          setLibrary((current) => ({
-            ...current,
-            activePatternId: copy.id,
-            patterns: [...current.patterns, copy]
-          }));
-          setWelcomeOpen(false);
-        }}
+        onDeletePattern={deletePattern}
+        onDuplicatePattern={duplicatePattern}
         onExportJson={(patternId) => {
           const record = library.patterns.find((entry) => entry.id === patternId);
           if (record === undefined) {
@@ -472,30 +226,15 @@ export function BeadloomApp(): ReactElement {
           try {
             const json = await file.text();
             const record = importPatternRecordFromExportJson(json, createPatternRecordId);
-            setLibrary((current) => ({
-              version: 1,
-              activePatternId: record.id,
-              patterns: [...current.patterns, record]
-            }));
-            setWelcomeOpen(false);
+            addImportedRecord(record);
             onAppStatus({ tone: "muted", key: "status.patternImported" });
           } catch {
             onAppStatus({ tone: "accent", key: "status.patternImportInvalid" });
           }
         }}
         onOpenChange={setLibraryOpen}
-        onOpenPattern={(patternId) => {
-          resetChatSession();
-          setLibrary((current) => ({ ...current, activePatternId: patternId }));
-          setWelcomeOpen(false);
-          setLibraryOpen(false);
-        }}
-        onRenamePattern={(patternId, title) => {
-          setLibrary((current) => ({
-            ...current,
-            patterns: current.patterns.map((record) => (record.id === patternId ? { ...record, title } : record))
-          }));
-        }}
+        onOpenPattern={openPattern}
+        onRenamePattern={renamePattern}
       />
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent closeLabel={t("dialog.close")}>
@@ -541,14 +280,7 @@ export function BeadloomApp(): ReactElement {
             </section>
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              onClick={() => {
-                saveLlmSettings(llm);
-                agentRef.current = null;
-                setSettingsOpen(false);
-              }}
-            >
+            <Button type="button" onClick={saveLlm}>
               {t("settings.save")}
             </Button>
           </DialogFooter>

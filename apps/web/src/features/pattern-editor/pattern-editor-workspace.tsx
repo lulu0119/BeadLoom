@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Layers, MessageCircle, Redo2, Undo2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -30,6 +30,7 @@ import {
   TooltipTrigger
 } from "@beadloom/ui";
 import { type AppStatusMessage } from "./app-status-message";
+import { useAppStore } from "./app-store";
 import { EditorSidePanels } from "./editor-side-panels";
 import { FloatingChromePanel } from "./floating-chrome-panel";
 import {
@@ -86,30 +87,36 @@ function toolRailButtonClassName(pressed = false): string {
 
 export type PatternEditorWorkspaceProps = {
   pattern: PatternDocument;
-  zoom: number;
-  onPatternChange: (next: PatternDocument | ((previous: PatternDocument) => PatternDocument)) => void;
   onAppStatus: (message: AppStatusMessage) => void;
   overlay?: ReactNode;
 };
 
 export function PatternEditorWorkspace({
   pattern,
-  zoom,
-  onPatternChange,
   onAppStatus,
   overlay
 }: PatternEditorWorkspaceProps): ReactElement {
   const { t } = useTranslation();
   const isDesktop = useDesktopLayout();
-  const [activeTool, setActiveTool] = useState<EditorTool>("hand");
-  const [activeColor, setActiveColor] = useState("H7");
+  const zoom = useAppStore((state) => state.zoom);
+  const activeTool = useAppStore((state) => state.activeTool);
+  const setActiveTool = useAppStore((state) => state.setActiveTool);
+  const activeColor = useAppStore((state) => state.activeColor);
+  const setActiveColor = useAppStore((state) => state.setActiveColor);
   const strokeOriginRef = useRef<PatternDocument | null>(null);
-  const [lineStartPoint, setLineStartPoint] = useState<PatternPoint | null>(null);
-  const [linePreviewPoint, setLinePreviewPoint] = useState<PatternPoint | null>(null);
-  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
-  const [chatOpen, setChatOpen] = useState(true);
-  const [frontPanel, setFrontPanel] = useState<"chat" | "palette">("chat");
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const lineStartPoint = useAppStore((state) => state.lineStartPoint);
+  const setLineStartPoint = useAppStore((state) => state.setLineStartPoint);
+  const linePreviewPoint = useAppStore((state) => state.linePreviewPoint);
+  const setLinePreviewPoint = useAppStore((state) => state.setLinePreviewPoint);
+  const desktopSidebarOpen = useAppStore((state) => state.desktopSidebarOpen);
+  const toggleDesktopPalette = useAppStore((state) => state.toggleDesktopPalette);
+  const chatOpen = useAppStore((state) => state.chatOpen);
+  const toggleChatPanel = useAppStore((state) => state.toggleChatPanel);
+  const frontPanel = useAppStore((state) => state.frontPanel);
+  const setFrontPanel = useAppStore((state) => state.setFrontPanel);
+  const mobileDrawerOpen = useAppStore((state) => state.mobileDrawerOpen);
+  const setMobileDrawerOpen = useAppStore((state) => state.setMobileDrawerOpen);
+  const updateActivePattern = useAppStore((state) => state.updateActivePattern);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartScrollRef = useRef<HTMLDivElement>(null);
   const handPanRef = useRef<{ clientX: number; clientY: number; scrollLeft: number; scrollTop: number } | null>(null);
@@ -130,10 +137,6 @@ export function PatternEditorWorkspace({
     drawPatternCanvas(canvas, pattern, paletteByCode, canvasLayout, lineStartPoint, linePreviewPoint);
   }, [canvasLayout, linePreviewPoint, lineStartPoint, paletteByCode, pattern]);
 
-  function toolLabel(tool: EditorTool): string {
-    return t(`workspace.tools.${tool}`);
-  }
-
   function handleCanvasClick(event: React.MouseEvent<HTMLCanvasElement>): void {
     const point = canvasPointToPatternPoint(event.currentTarget, event.clientX, event.clientY, pattern, canvasLayout);
     if (point === null) {
@@ -152,7 +155,7 @@ export function PatternEditorWorkspace({
     }
 
     if (activeTool === "paintBucket") {
-      applyPatternEdit(bucketFillPattern(pattern, point, activeColor));
+      updateActivePattern(bucketFillPattern(pattern, point, activeColor));
     }
   }
 
@@ -186,7 +189,7 @@ export function PatternEditorWorkspace({
       event.currentTarget.setPointerCapture(event.pointerId);
       const targetCode = strokeTool === "eraser" ? null : activeColor;
       strokeOriginRef.current = clonePattern(pattern);
-      onPatternChange((currentPattern) => {
+      updateActivePattern((currentPattern) => {
         const cells = applyLineToCells(currentPattern, point, point, targetCode);
         const next = { ...currentPattern, cells, legend: buildLegend(cells) };
         chartDragStrokeLatestRef.current = next;
@@ -223,7 +226,7 @@ export function PatternEditorWorkspace({
       const clientX = event.clientX;
       const clientY = event.clientY;
       const targetCode = strokeTool === "eraser" ? null : activeColor;
-      onPatternChange((currentPattern) => {
+      updateActivePattern((currentPattern) => {
         const current = canvasPointToPatternPoint(canvas, clientX, clientY, currentPattern, canvasLayout);
         const last = chartDragStrokeLastCellRef.current;
         if (current === null || last === null) {
@@ -258,7 +261,7 @@ export function PatternEditorWorkspace({
     chartDragStrokeLatestRef.current = null;
     strokeOriginRef.current = null;
     if (snapshot !== null && origin !== undefined && origin !== null) {
-      applyPatternEdit(commitPatternEdit(origin, snapshot));
+      updateActivePattern(commitPatternEdit(origin, snapshot));
     }
   }
 
@@ -272,7 +275,7 @@ export function PatternEditorWorkspace({
     }
 
     if (activeTool === "line" && lineStartPoint !== null && linePreviewPoint !== null) {
-      applyPatternEdit(drawPatternLine(pattern, lineStartPoint, linePreviewPoint, activeColor));
+      updateActivePattern(drawPatternLine(pattern, lineStartPoint, linePreviewPoint, activeColor));
     }
     setLineStartPoint(null);
     setLinePreviewPoint(null);
@@ -285,7 +288,7 @@ export function PatternEditorWorkspace({
       return;
     }
     const undone = undoPatternHistory(history);
-    onPatternChange(undone.pattern);
+    updateActivePattern(undone.pattern);
   }
 
   function handleRedo(): void {
@@ -295,11 +298,7 @@ export function PatternEditorWorkspace({
       return;
     }
     const redone = redoPatternHistory(history);
-    onPatternChange(redone.pattern);
-  }
-
-  function applyPatternEdit(editedPattern: PatternDocument): void {
-    onPatternChange(editedPattern);
+    updateActivePattern(redone.pattern);
   }
 
   const canvasCursorClassName = getCanvasCursorClassName(activeTool);
@@ -308,7 +307,7 @@ export function PatternEditorWorkspace({
 
   const drawingToolButtons = editorTools.map((tool) => {
     const Icon = getToolIcon(tool);
-    const label = toolLabel(tool);
+    const label = t(`workspace.tools.${tool}`);
     return (
       <Tooltip key={tool}>
         <TooltipTrigger
@@ -333,8 +332,8 @@ export function PatternEditorWorkspace({
       legend={legend}
       paletteByCode={paletteByCode}
       onActiveColorChange={setActiveColor}
-      onApplyDelete={(fromCode) => applyPatternEdit(deletePatternColor(pattern, fromCode))}
-      onApplyReplace={(fromCode) => applyPatternEdit(replacePatternColor(pattern, fromCode, activeColor))}
+      onApplyDelete={(fromCode) => updateActivePattern(deletePatternColor(pattern, fromCode))}
+      onApplyReplace={(fromCode) => updateActivePattern(replacePatternColor(pattern, fromCode, activeColor))}
       showPaletteHeading={!isDesktop}
     />
   );
@@ -409,12 +408,7 @@ export function PatternEditorWorkspace({
                 type="button"
                 onClick={() => {
                   if (isDesktop) {
-                    setDesktopSidebarOpen((open) => {
-                      if (!open) {
-                        setFrontPanel("palette");
-                      }
-                      return !open;
-                    });
+                    toggleDesktopPalette();
                     return;
                   }
                   setMobileDrawerOpen(true);
@@ -432,14 +426,7 @@ export function PatternEditorWorkspace({
                 aria-label={chatOpen ? t("chat.hidePanel") : t("chat.showPanel")}
                 className={toolRailButtonClassName(chatOpen)}
                 type="button"
-                onClick={() => {
-                  setChatOpen((open) => {
-                    if (!open) {
-                      setFrontPanel("chat");
-                    }
-                    return !open;
-                  });
-                }}
+                onClick={toggleChatPanel}
               >
                 <MessageCircle className="h-5 w-5" aria-hidden="true" />
               </TooltipTrigger>
