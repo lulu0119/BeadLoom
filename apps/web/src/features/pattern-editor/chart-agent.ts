@@ -10,6 +10,12 @@ import {
 import { defaultPalette } from "@beadloom/palettes";
 import { z } from "zod";
 import { installReadableStreamAsyncIterator } from "@/lib/install-readable-stream-async-iterator";
+import {
+  logStepRequest,
+  logTurnInput,
+  summarizeAgentInput,
+  toLoggedMessages
+} from "./agent-debug-log";
 import type { LlmSettings } from "./llm-settings";
 import { previewToDataUrl, renderBoardPreview, type BoardCrop } from "./look-at-board";
 
@@ -22,6 +28,7 @@ export type ChartAgentOptions = {
   commitPattern: (pattern: PatternDocument) => void;
   llm: LlmSettings;
   runner?: Runner;
+  onBoardPreview?: (previewUrl: string, toolCallId: string) => void;
 };
 
 const paletteByCode = new Map(defaultPalette.map((color) => [color.code, color]));
@@ -58,7 +65,7 @@ function paletteUsage(pattern: PatternDocument) {
 
 export async function createChartTools(
   options: Pick<ChartAgentOptions, "getPattern" | "commitPattern"> & {
-    onBoardPreview?: (dataUrl: string) => void;
+    onBoardPreview?: (previewUrl: string, toolCallId: string) => void;
   }
 ) {
   const lookAtBoard = await tool({
@@ -70,7 +77,7 @@ export async function createChartTools(
       width: z.number().int().optional(),
       height: z.number().int().optional()
     }),
-    execute: ({ column, row, width, height }) => {
+    execute: ({ column, row, width, height }, toolOptions) => {
       const pattern = options.getPattern();
       const crop: BoardCrop | undefined =
         column === undefined && row === undefined && width === undefined && height === undefined
@@ -92,7 +99,7 @@ export async function createChartTools(
         legend: preview.legend
       };
       if (dataUrl !== null) {
-        options.onBoardPreview?.(dataUrl);
+        options.onBoardPreview?.(dataUrl, toolOptions.toolCallId);
       }
       return JSON.stringify(meta);
     }
@@ -198,13 +205,22 @@ function boardPreviewUserInput(previewDataUrls: string[]): AgentInput {
   };
 }
 
+function withoutDeveloperRole(inputs: readonly AgentInput[]): AgentInput[] {
+  return inputs.map((input) =>
+    input.type === "message" && input.role === "developer"
+      ? { content: input.content, role: "system", type: "message" }
+      : input
+  );
+}
+
 export async function createChartAgent(options: ChartAgentOptions): Promise<Agent> {
   const pendingBoardPreviews: string[] = [];
   const tools = await createChartTools({
     getPattern: options.getPattern,
     commitPattern: options.commitPattern,
-    onBoardPreview: (dataUrl) => {
-      pendingBoardPreviews.push(dataUrl);
+    onBoardPreview: (previewUrl, toolCallId) => {
+      pendingBoardPreviews.push(previewUrl);
+      options.onBoardPreview?.(previewUrl, toolCallId);
     }
   });
   const normalizedBaseURL = options.llm.baseURL.endsWith("/") ? options.llm.baseURL : `${options.llm.baseURL}/`;
@@ -239,15 +255,37 @@ export async function createChartAgent(options: ChartAgentOptions): Promise<Agen
       stopWhen: stopWhenToolsAreIdle
     });
 
-  const runner: Runner = async (context) =>
-    innerRunner({
+  const runner: Runner = async (context) => {
+    void logTurnInput(context.turnId, {
+      model: options.llm.model,
+      baseURL: normalizedBaseURL,
+      tools: context.tools.map((tool) => ({
+        name: tool.function.name,
+        description: tool.function.description ?? null
+      })),
+      summary: summarizeAgentInput(context.input)
+    });
+    return innerRunner({
       ...context,
+      input: withoutDeveloperRole(context.input),
       prepareStep: async (step) => {
         const previewDataUrls = pendingBoardPreviews.splice(0);
+        const sanitizedStepInput = withoutDeveloperRole(step.input);
         const input =
           previewDataUrls.length === 0
-            ? step.input
-            : [...step.input, boardPreviewUserInput(previewDataUrls)];
+            ? sanitizedStepInput
+            : [...sanitizedStepInput, boardPreviewUserInput(previewDataUrls)];
+        void logStepRequest({
+          turnId: context.turnId,
+          stepNumber: step.stepNumber,
+          model: options.llm.model,
+          baseURL: normalizedBaseURL,
+          injectedPreviewCount: previewDataUrls.length,
+          messages: toLoggedMessages(
+            context.instructions,
+            previewDataUrls.length === 0 ? step.input : input
+          )
+        });
         if (context.prepareStep != null) {
           return context.prepareStep({ ...step, input });
         }
@@ -257,6 +295,7 @@ export async function createChartAgent(options: ChartAgentOptions): Promise<Agen
         return { input };
       }
     });
+  };
 
   return createAgent({
     instructions: INSTRUCTIONS,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, type DragEvent, type FormEvent, type ReactElement } from "react";
-import { Paperclip, SendHorizontal, Square } from "lucide-react";
+import { ChevronRight, Paperclip, SendHorizontal, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   Bubble,
@@ -16,51 +16,71 @@ import {
   MessageScrollerViewport,
   Textarea
 } from "@beadloom/ui";
+import { useAppStore } from "./app-store";
+import type { ChatLine, ChatToolStatus } from "./chart-chat-transcript";
 
-export type ChatLine = {
-  id: string;
-  role: "user" | "assistant" | "tool";
-  text: string;
-};
-
-type ChartChatPanelProps = {
-  lines: ChatLine[];
-  busy: boolean;
-  hasApiKey: boolean;
-  attachedName: string | null;
-  onAttachFile: (file: File) => void;
-  onClearAttach: () => void;
-  onSend: (text: string) => void;
-  onInterrupt: () => void;
-  onOpenSettings: () => void;
-};
-
-function bubbleVariantForRole(role: ChatLine["role"]): "default" | "secondary" | "muted" {
-  switch (role) {
-    case "user":
-      return "default";
-    case "tool":
-      return "muted";
-    case "assistant":
-      return "secondary";
+function formatJsonPayload(raw: string): string {
+  if (raw.trim() === "") {
+    return raw;
+  }
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
   }
 }
 
-export function ChartChatPanel({
-  lines,
-  busy,
-  hasApiKey,
-  attachedName,
-  onAttachFile,
-  onClearAttach,
-  onSend,
-  onInterrupt,
-  onOpenSettings
-}: ChartChatPanelProps): ReactElement {
+const toolStatusDots: Record<ChatToolStatus, string> = {
+  running: "bg-amber-500 animate-pulse",
+  done: "bg-emerald-500",
+  error: "bg-destructive"
+};
+
+function textLine(align: "start" | "end", variant: "default" | "secondary" | "destructive", text: string): ReactElement {
+  return (
+    <Message align={align}>
+      <MessageContent>
+        <Bubble align={align} variant={variant}>
+          <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+        </Bubble>
+      </MessageContent>
+    </Message>
+  );
+}
+
+export function ChartChatPanel(): ReactElement {
   const { t } = useTranslation();
+  const lines = useAppStore((state) => state.chatLines);
+  const busy = useAppStore((state) => state.chatBusy);
+  const hasApiKey = useAppStore((state) => state.llm.apiKey.trim() !== "");
+  const attachedName = useAppStore((state) => state.attachedFile?.name ?? null);
+  const attachFile = useAppStore((state) => state.attachFile);
+  const clearAttachedFile = useAppStore((state) => state.clearAttachedFile);
+  const sendChatMessage = useAppStore((state) => state.sendChatMessage);
+  const interruptChat = useAppStore((state) => state.interruptChat);
+  const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
-  const hasMessages = lines.length > 0;
+  const visibleLines = lines.filter((line) => line.kind !== "assistantText" || line.text !== "");
+  const lastLine = visibleLines.at(-1);
+  const showThinking =
+    busy &&
+    (lastLine === undefined ||
+      (lastLine.kind !== "assistantText" &&
+        lastLine.kind !== "error" &&
+        !(lastLine.kind === "tool" && lastLine.status === "running")));
+  const hasMessages = visibleLines.length > 0 || showThinking;
+
+  function toolStatusText(status: ChatToolStatus): string {
+    switch (status) {
+      case "running":
+        return t("chat.toolRunning");
+      case "done":
+        return t("chat.toolDone");
+      case "error":
+        return t("chat.toolError");
+    }
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -68,7 +88,7 @@ export function ChartChatPanel({
     if (text.trim() === "" && attachedName === null) {
       return;
     }
-    onSend(text);
+    void sendChatMessage(text);
     if (composerRef.current !== null) {
       composerRef.current.value = "";
     }
@@ -78,8 +98,78 @@ export function ChartChatPanel({
     event.preventDefault();
     const dropped = event.dataTransfer.files[0];
     if (dropped !== undefined && dropped.type.startsWith("image/")) {
-      onAttachFile(dropped);
+      attachFile(dropped);
     }
+  }
+
+  function renderLine(line: ChatLine): ReactElement {
+    if (line.kind === "user") {
+      return textLine("end", "default", line.text);
+    }
+    if (line.kind === "assistantText") {
+      return textLine("start", "secondary", line.text);
+    }
+    if (line.kind === "error") {
+      return textLine("start", "destructive", line.text);
+    }
+    const hasDetails = line.argsText !== "" || line.resultText !== null || line.previewUrl !== null;
+    const summaryRow = (
+      <>
+        {hasDetails ? <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open/tool:rotate-90" /> : null}
+        <span className="font-mono text-xs">{line.name}</span>
+        <span className="text-muted-foreground flex items-center gap-1 text-xs">
+          <span className={`h-1.5 w-1.5 rounded-full ${toolStatusDots[line.status]}`} />
+          {toolStatusText(line.status)}
+        </span>
+      </>
+    );
+    return (
+      <Message align="start">
+        <MessageContent>
+          <Bubble align="start" variant="muted">
+            <BubbleContent>
+              {hasDetails ? (
+                <details className="group/tool min-w-0">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                    {summaryRow}
+                  </summary>
+                  <div className="mt-2 grid min-w-0 gap-2">
+                    {line.argsText !== "" ? (
+                      <div className="grid min-w-0 gap-1">
+                        <div className="text-muted-foreground text-xs">{t("chat.toolArguments")}</div>
+                        <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap">
+                          {formatJsonPayload(line.argsText)}
+                        </pre>
+                      </div>
+                    ) : null}
+                    {line.resultText !== null ? (
+                      <div className="grid min-w-0 gap-1">
+                        <div className="text-muted-foreground text-xs">{t("chat.toolResult")}</div>
+                        <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap">{line.resultText}</pre>
+                      </div>
+                    ) : null}
+                    {line.previewUrl !== null ? (
+                      <div className="grid min-w-0 gap-1">
+                        <div className="text-muted-foreground text-xs">{t("chat.toolPreview")}</div>
+                        <a href={line.previewUrl} target="_blank" rel="noreferrer">
+                          <img
+                            src={line.previewUrl}
+                            alt={t("chat.toolPreviewAlt")}
+                            className="h-auto w-full max-w-64 rounded-md border"
+                          />
+                        </a>
+                      </div>
+                    ) : null}
+                  </div>
+                </details>
+              ) : (
+                <div className="flex items-center gap-2">{summaryRow}</div>
+              )}
+            </BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
+    );
   }
 
   return (
@@ -94,22 +184,35 @@ export function ChartChatPanel({
           <MessageScroller className="min-h-0 flex-1">
             <MessageScrollerViewport>
               <MessageScrollerContent aria-busy={busy} className="min-h-0 gap-3">
-                {lines.map((line) => {
-                  const align = line.role === "user" ? "end" : "start";
-                  return (
-                    <MessageScrollerItem key={line.id} messageId={line.id} scrollAnchor={line.role === "user"}>
-                      <Message align={align}>
-                        <MessageContent>
-                          <Bubble align={align} variant={bubbleVariantForRole(line.role)}>
-                            <BubbleContent className={line.role === "tool" ? "font-mono text-xs" : undefined}>
-                              {line.text}
-                            </BubbleContent>
-                          </Bubble>
-                        </MessageContent>
-                      </Message>
-                    </MessageScrollerItem>
-                  );
-                })}
+                {visibleLines.map((line) => (
+                  <MessageScrollerItem key={line.id} messageId={line.id} scrollAnchor={line.kind === "user"}>
+                    {renderLine(line)}
+                  </MessageScrollerItem>
+                ))}
+                {showThinking ? (
+                  <MessageScrollerItem key="thinking" messageId="thinking">
+                    <Message align="start">
+                      <MessageContent>
+                        <Bubble align="start" variant="secondary">
+                          <BubbleContent>
+                            <span className="flex items-center gap-2" role="status">
+                              <span className="text-muted-foreground text-xs">{t("chat.thinking")}</span>
+                              <span className="flex items-center gap-1" aria-hidden="true">
+                                {["-0.3s", "-0.15s", "0s"].map((delay) => (
+                                  <span
+                                    key={delay}
+                                    className="bg-muted-foreground h-1.5 w-1.5 animate-bounce rounded-full"
+                                    style={{ animationDelay: delay }}
+                                  />
+                                ))}
+                              </span>
+                            </span>
+                          </BubbleContent>
+                        </Bubble>
+                      </MessageContent>
+                    </Message>
+                  </MessageScrollerItem>
+                ) : null}
               </MessageScrollerContent>
             </MessageScrollerViewport>
           </MessageScroller>
@@ -122,7 +225,7 @@ export function ChartChatPanel({
           className="text-muted-foreground h-auto justify-start px-3 pb-1 text-left text-xs"
           type="button"
           variant="link"
-          onClick={onOpenSettings}
+          onClick={() => setSettingsOpen(true)}
         >
           {t("chat.needApiKey")}
         </Button>
@@ -130,7 +233,7 @@ export function ChartChatPanel({
       {attachedName !== null ? (
         <div className="flex items-center justify-between gap-2 px-3 text-xs">
           <span className="truncate">{attachedName}</span>
-          <Button className="h-auto px-0" type="button" variant="link" onClick={onClearAttach}>
+          <Button className="h-auto px-0" type="button" variant="link" onClick={clearAttachedFile}>
             {t("chat.removeImage")}
           </Button>
         </div>
@@ -147,7 +250,7 @@ export function ChartChatPanel({
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             if (file !== undefined) {
-              onAttachFile(file);
+              attachFile(file);
             }
             event.currentTarget.value = "";
           }}
@@ -169,7 +272,7 @@ export function ChartChatPanel({
             <Paperclip className="h-4 w-4" />
           </Button>
           {busy ? (
-            <Button aria-label={t("chat.stop")} size="icon" type="button" variant="secondary" onClick={onInterrupt}>
+            <Button aria-label={t("chat.stop")} size="icon" type="button" variant="secondary" onClick={interruptChat}>
               <Square className="h-4 w-4" />
             </Button>
           ) : (
