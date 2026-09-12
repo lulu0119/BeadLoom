@@ -4,9 +4,9 @@ import { useId, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { mardPalette, type BeadColor } from "@perlerloom/palettes";
-import { readableTextHexOnBackgroundHex } from "@perlerloom/core";
-import { cn } from "@perlerloom/ui";
+import { defaultPalette, type BeadColor } from "@beadloom/palettes";
+import { readableTextHexOnBackgroundHex } from "@beadloom/core";
+import { cn } from "@beadloom/ui";
 import {
   drawingColorChromeBorderColorWhenActiveClass,
   drawingColorChromeBorderColorWhenIdleClass,
@@ -37,7 +37,7 @@ function sortBeadColorsByCodeNumber(colors: readonly BeadColor[]): BeadColor[] {
   });
 }
 
-function buildMardPaletteLetterGroups(palette: readonly BeadColor[]): { prefix: string; colors: BeadColor[] }[] {
+function buildPaletteLetterGroups(palette: readonly BeadColor[]): { prefix: string; colors: BeadColor[] }[] {
   const bucket = new Map<string, BeadColor[]>();
   const prefixOrder: string[] = [];
 
@@ -58,23 +58,22 @@ function buildMardPaletteLetterGroups(palette: readonly BeadColor[]): { prefix: 
     }));
 }
 
-type MardPaletteGridProps = {
+type PaletteGridProps = {
   activeColor: string;
   onSelectColor: (code: string) => void;
   className?: string;
-  /** Omit outer card chrome and heading (e.g. inside a menu). */
-  embedded?: boolean;
+  showHeading?: boolean;
 };
 
-export function MardPaletteGrid({
+export function PaletteGrid({
   activeColor,
   onSelectColor,
   className,
-  embedded = false
-}: MardPaletteGridProps): ReactElement {
+  showHeading = true
+}: PaletteGridProps): ReactElement {
   const { t } = useTranslation();
   const panelIdPrefix = useId().replaceAll(":", "");
-  const letterGroups = useMemo(() => buildMardPaletteLetterGroups(mardPalette), []);
+  const letterGroups = useMemo(() => buildPaletteLetterGroups(defaultPalette), []);
   const [expandedPrefixes, setExpandedPrefixes] = useState<Set<string>>(() => new Set());
 
   function togglePrefix(prefix: string): void {
@@ -94,7 +93,7 @@ export function MardPaletteGrid({
       {letterGroups.map(({ prefix, colors }) => {
         const isExpanded = expandedPrefixes.has(prefix);
         const firstColor = colors[0];
-        const panelId = `${panelIdPrefix}-mard-palette-group-${prefix}`;
+        const panelId = `${panelIdPrefix}-palette-group-${prefix}`;
 
         return (
           <div className="min-w-0" key={prefix}>
@@ -116,7 +115,7 @@ export function MardPaletteGrid({
                   aria-hidden="true"
                   className="border-border ml-auto h-5 w-5 shrink-0 rounded-sm border"
                   style={{ backgroundColor: firstColor.hex }}
-                  title={t("mardPalette.firstInGroup", { code: firstColor.code })}
+                  title={t("defaultPalette.firstInGroup", { code: firstColor.code })}
                 />
               ) : null}
             </button>
@@ -134,7 +133,7 @@ export function MardPaletteGrid({
                     const labelColor = readableTextHexOnBackgroundHex(color.hex);
                     return (
                       <button
-                        aria-label={t("mardPalette.selectColor", { code: color.code })}
+                        aria-label={t("defaultPalette.selectColor", { code: color.code })}
                         aria-pressed={isActive}
                         className={cn(
                           "flex aspect-square min-h-0 min-w-0 flex-col items-center justify-center overflow-hidden rounded-md px-1 py-0.5 text-center font-mono text-xs font-bold tracking-wide transition hover:brightness-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-ring",
@@ -162,20 +161,12 @@ export function MardPaletteGrid({
     </div>
   );
 
-  const paletteBody = (
-    <div className={cn("flex flex-col", embedded && "px-1 pb-1 pt-0.5")}>
-      {groupsList}
-    </div>
-  );
-
-  if (embedded) {
-    return <div className={cn("flex min-w-0 w-full shrink-0 flex-col", className)}>{paletteBody}</div>;
-  }
-
   return (
-    <section aria-label={t("mardPalette.sectionLabel")} className={cn("border-border flex w-full shrink-0 flex-col rounded-xl border bg-white p-2", className)}>
-      <h2 className="text-muted-foreground mb-1.5 shrink-0 text-xs font-semibold uppercase tracking-wide">{t("mardPalette.heading")}</h2>
-      {paletteBody}
+    <section aria-label={t("defaultPalette.sectionLabel")} className={cn("flex w-full shrink-0 flex-col", className)}>
+      {showHeading ? (
+        <h2 className="text-muted-foreground mb-1.5 shrink-0 text-xs font-semibold uppercase tracking-wide">{t("defaultPalette.heading")}</h2>
+      ) : null}
+      {groupsList}
     </section>
   );
 }

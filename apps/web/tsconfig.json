@@ -20,11 +20,11 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@perlerloom/core": ["../../packages/core/src/index.ts"],
-      "@perlerloom/palettes": ["../../packages/palettes/src/index.ts"],
-      "@perlerloom/ui": ["../../packages/ui/src/index.ts"],
-      "@perlerloom/ui/components": ["../../packages/ui/src/components"],
-      "@perlerloom/ui/components/*": ["../../packages/ui/src/components/*"]
+      "@beadloom/core": ["../../packages/core/src/index.ts"],
+      "@beadloom/palettes": ["../../packages/palettes/src/index.ts"],
+      "@beadloom/ui": ["../../packages/ui/src/index.ts"],
+      "@beadloom/ui/components": ["../../packages/ui/src/components"],
+      "@beadloom/ui/components/*": ["../../packages/ui/src/components/*"]
     }
   },
   "include": [

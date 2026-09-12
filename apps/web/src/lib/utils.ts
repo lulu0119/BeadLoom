@@ -1,1 +1,1 @@
-export { cn } from "@perlerloom/ui";
+export { cn } from "@beadloom/ui";

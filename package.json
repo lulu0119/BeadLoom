@@ -1,25 +1,30 @@
 {
-  "name": "perlerloom",
+  "name": "beadloom",
   "version": "0.1.0",
   "license": "AGPL-3.0-or-later",
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "dev": "pnpm --filter @perlerloom/web dev",
+    "dev": "pnpm --filter @beadloom/web dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
+    "@beadloom/core": "workspace:*",
+    "@beadloom/palettes": "workspace:*",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20.19.39",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@xsai/generate-text": "0.4.4",
+    "jpeg-js": "^0.4.4",
     "jsdom": "^27.4.0",
     "typescript": "^5.9.3",
+    "vieval": "0.0.12",
     "vitest": "^4.0.16"
   }
 }

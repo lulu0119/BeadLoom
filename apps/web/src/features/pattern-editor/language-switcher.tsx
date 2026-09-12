@@ -9,7 +9,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue
-} from "@perlerloom/ui";
+} from "@beadloom/ui";
 
 export function LanguageSwitcher(): ReactElement {
   const { i18n, t } = useTranslation();
@@ -28,8 +28,7 @@ export function LanguageSwitcher(): ReactElement {
     >
       <SelectTrigger
         aria-label={t("languageSwitcher.ariaLabel")}
-        className="border-border h-9 w-full max-w-[8.5rem] min-w-0 rounded-full text-xs font-semibold"
-        size="sm"
+        className="w-full min-w-0"
       >
         <SelectValue>
           {(value: string | null) => {

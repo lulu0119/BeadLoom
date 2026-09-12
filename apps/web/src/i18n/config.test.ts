@@ -7,12 +7,12 @@ describe("i18n config", () => {
   });
 
   it("initializes with English before applying stored browser language", async () => {
-    localStorage.setItem("perlerloom.language", "zh-CN");
+    localStorage.setItem("beadloom.language", "zh-CN");
 
     const { default: i18n, i18nInitialization } = await import("./config");
     await i18nInitialization;
 
     expect(i18n.resolvedLanguage).toBe("en");
-    expect(i18n.t("meta.title")).toBe("Perlerloom");
+    expect(i18n.t("meta.title")).toBe("BeadLoom");
   });
 });

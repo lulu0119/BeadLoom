@@ -5,7 +5,7 @@ export type ExportMetadata = {
 
 export function createExportMetadata(shareUrl: string): ExportMetadata {
   return {
-    attributionUrl: "https://perlerloom.app",
+    attributionUrl: "https://beadloom.app",
     qrPayload: shareUrl
   };
 }

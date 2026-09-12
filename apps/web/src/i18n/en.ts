@@ -1,8 +1,8 @@
 export const en = {
   meta: {
-    title: "Perlerloom",
+    title: "BeadLoom",
     description:
-      "Turn photos into bead charts in one click, or start from a blank grid—\nmatch image colors to palette codes, edit on a worksheet-style canvas,\nand save charts locally in your browser."
+      "Talk to a drawing agent on a bead chart. Attach a reference photo in chat or type what to draw, then keep editing the grid by hand."
   },
   languageSwitcher: {
     ariaLabel: "Language",
@@ -13,102 +13,56 @@ export const en = {
     close: "Close"
   },
   header: {
-    logoAlt: "Perlerloom logo",
+    logoAlt: "BeadLoom logo",
     openLibrary: "Saved charts"
   },
-  welcome: {
-    title: "Start a bead chart",
-    body: "Import a photo to match colors to beads, or create an empty grid and paint it yourself.",
-    importImage: "Import image",
-    createNewPattern: "Create new pattern",
-  },
   status: {
-    sourceTooLarge:
-      "Source is larger than {{max}} cells. Choose an explicit target size before generating.",
-    readyNoResize: "Ready to generate without resizing.",
-    imagePreviewFailed: "Image preview failed.",
-    chooseImageBeforeGenerate: "Choose an image before generating.",
-    sizeComputeFailed: "Pattern size could not be computed. Check the fields and try again.",
-    converting: "Converting image locally…",
-    patternGenerated: "Pattern generated locally.",
-    imageConversionFailed: "Image conversion failed.",
-    emptyGridReady: "Empty grid ready—paint with the pencil or pick colors from the palette.",
-    restored: "Restored: {{label}}.",
     emptyCellEyedropper: "That cell is empty—no bead color to pick.",
     noUndo: "No edits to undo.",
     noRedo: "No edits to redo.",
     librarySaveFailed: "Could not write patterns to browser storage. Export important charts as a file from the library.",
-    patternImportInvalid: "That file is not a valid Perlerloom chart export.",
-    patternImported: "Pattern imported into your library.",
+    patternImportInvalid: "That file is not a valid BeadLoom chart export.",
+    patternImported: "Chart file added to your library.",
     exportPngFailed: "PNG export failed."
   },
-  errors: {
-    readImageCanvasUnavailable: "Canvas is not available for image conversion.",
-    conversionRgbBufferMismatch: "RGB buffer size does not match image dimensions.",
-    conversionFailed: "Pattern conversion failed."
+  chat: {
+    placeholder: "What should we draw?",
+    emptyHint: "Chat",
+    messages: "Chat messages",
+    scrollToEnd: "Scroll to latest",
+    needApiKey: "Add an API key in settings to talk to the agent.",
+    attachImage: "Attach a photo",
+    removeImage: "Remove",
+    send: "Send",
+    stop: "Stop",
+    drawThis: "Draw this on the board.",
+    turnFailed: "The agent could not finish that turn.",
+    corsBlocked: "The browser blocked this request (CORS). This API does not allow calls from a web page.",
+    hidePanel: "Hide chat",
+    showPanel: "Show chat"
   },
-  history: {
-    generatedPattern: "Generated pattern",
-    pencilStroke: "Pencil stroke",
-    eraserStroke: "Eraser stroke",
-    bucketFill: "Bucket fill",
-    line: "Line",
-    replace: "Replace",
-    delete: "Delete"
+  settings: {
+    open: "Settings",
+    title: "Settings",
+    description: "These stay in this browser.",
+    language: "Language",
+    agent: "Drawing agent",
+    agentDescription: "The board works without a key. Add one only when you want to chat.",
+    baseURL: "Base URL",
+    model: "Model",
+    apiKey: "API key",
+    save: "Save"
   },
-  importDialog: {
-    title: "Create chart from photo",
-    description:
-      "Build a new bead chart from a picture. To reopen a chart you exported earlier, use Open a saved chart—not the photo upload.",
-    sectionOpenSavedChart: "Open a saved chart",
-    sectionFromPhoto: "From a photo",
-    dropHint: "Drop image here or click to upload",
-    formatsHint: "PNG, JPEG, or another browser-supported image",
-    chooseSourceImage: "Choose source image",
-    selectedSourceAlt: "Selected source image",
-    sourceDimensions: "Source: {{width}} × {{height}} px",
-    previewNote:
-      "Preview is the uploaded image only; the bead grid appears after you tap Generate pattern.",
-    emptyPreviewHint: "Image preview appears here before generation.",
-    sectionPatternSize: "Pattern size",
-    patternSizeHeading: "Pattern size",
-    patternSizeIntro:
-      "Images up to {{max}} × {{max}} keep their source size by default. Larger images need an explicit target.",
-    resizeOriginal: "Original",
-    resizeDimensions: "W/H",
-    resizeScale: "Scale",
-    targetWidth: "Target width",
-    targetHeight: "Target height",
-    scaleFactor: "Scale factor",
-    downsamplingMethod: "Downsampling method",
-    nearestNeighbor: "Nearest neighbor",
-    gridMode: "Grid mode",
-    sectionPreprocessing: "Preprocessing options",
-    preprocessingHeading: "Preprocessing",
-    preprocessingIntro:
-      "Tune color count, match and cluster color space, and downsampling before generating.",
-    targetColors: "Target colors",
-    targetColorsHint:
-      "This is how many k-means clusters are formed before each cluster center is snapped to the nearest bead color. The chart can end up with fewer distinct bead codes when several clusters map to the same palette entry.",
-    matchSpace: "Match space",
-    clusterSpace: "Cluster space",
-    generatePattern: "Generate pattern",
-    generating: "Generating…"
+  sizeChip: {
+    aria: "Chart size",
+    width: "Width",
+    height: "Height"
   },
-  newPatternDialog: {
-    title: "New pattern",
-    description:
-      "Choose the grid size in beads. You can paint the empty grid with the pencil and other tools.",
-    widthLabel: "Width (beads)",
-    heightLabel: "Height (beads)",
-    widthAria: "Pattern width in beads",
-    heightAria: "Pattern height in beads",
-    cancel: "Cancel",
-    createGrid: "Create grid",
-    errors: {
-      wholeNumbers: "Width and height must be whole numbers.",
-      sizeRange: "Use sizes between 1 and {{max}}."
-    }
+  welcome: {
+    title: "New chart",
+    description: "Choose the bead grid size. Width and height are independent. Attach a reference photo later in chat if the agent should look at one.",
+    createBlank: "Create blank chart",
+    cancel: "Back to chart"
   },
   workspace: {
     tools: {
@@ -120,16 +74,6 @@ export const en = {
       line: "Line"
     },
     editorToolsAside: "Editor tools",
-    toolRailPreviousPage: "Drawing tools",
-    toolRailNextPage: "Import and export",
-    toolRailPagerLabel: "Editor tools, page {{page}} of 2",
-    newImportTooltip: "Create a new chart from a photo (upload, options, then generate).",
-    createNewPatternTooltip: "Start from an empty bead grid.",
-    patternLibraryTooltip: "Open charts saved on this device.",
-    exportImageTooltip: "Export a picture of your chart to share or print.",
-    exportFileTooltip: "Download an editable file you can open again here.",
-    newImport: "Photo → chart",
-    createNewPattern: "Create new pattern",
     magnificationControls: "Magnification controls",
     zoomOut: "Zoom out",
     zoomIn: "Zoom in",
@@ -137,28 +81,15 @@ export const en = {
     zoomInTooltip: "Enlarge the chart preview (finer cells).",
     chartZoom: "Chart zoom",
     editableBeadPattern: "Editable bead pattern",
-    paletteAndHistoryAside: "Palette and history",
-    openPaletteAndHistory: "Open palette and history",
-    openPaletteAndHistoryTooltip: "Palette, colors used in the chart, and undo history.",
-    dismissPaletteAndHistory: "Dismiss palette and history",
-    paletteAndHistoryDialog: "Palette and history"
-  },
-  chartHud: {
-    regionLabel: "Chart tool options",
-    hand: "Drag on the chart to scroll the preview.",
-    eyedropperIdle: "Move over a bead to preview its color.",
-    eyedropperEmpty: "Empty cell — nothing to pick.",
-    pencil: "While dragging, the pencil paints a single-bead path.",
-    eraser: "While dragging, the eraser clears beads along the path.",
-    bucket: "Flood fill matches the same color and touches edges.",
-    line: "Place the start, move, then release to draw a straight run.",
-    chooseDrawingColor: "Choose the active bead color for pencil, fill, and line tools."
+    paletteAside: "Palette",
+    openPalette: "Open palette",
+    openPaletteTooltip: "Palette and colors used in the chart.",
+    dismissPalette: "Dismiss palette",
+    paletteDialog: "Palette"
   },
   sidePanels: {
     legendAria: "Legend badges",
     usedInChart: "Used in chart",
-    historyTimelineAria: "History timeline",
-    history: "History",
     undo: "Undo",
     redo: "Redo",
     legendSelect: "Select {{code}}, {{count}} beads in chart",
@@ -166,13 +97,13 @@ export const en = {
     legendReplaceTitle: "Replace {{fromCode}} with {{activeColor}}",
     legendDelete: "Delete {{fromCode}} from pattern",
     legendDeleteTitle: "Delete {{fromCode}}",
-    undoTooltip: "Step back one edit in the timeline.",
+    undoTooltip: "Step back one edit.",
     redoTooltip: "Replay the next edit after an undo."
   },
   library: {
     dialogTitle: "Pattern library",
     dialogDescription:
-      "Work with charts in this browser: open them, export a picture, or download an editable file to move or share.",
+      "Work with charts in this browser: open them, export a picture, or download an editable JSON file to move or share.",
     searchLabel: "Search",
     searchPlaceholder: "Search by title",
     sortLabel: "Sort",
@@ -186,20 +117,21 @@ export const en = {
     duplicate: "Duplicate",
     exportPng: "Export image",
     exportImageHint: "Export a picture of this chart.",
-    exportJson: "Export file",
-    exportFileHint: "Download an editable file you can open again here.",
+    exportJson: "Export chart file",
+    exportFileHint: "Download a BeadLoom JSON chart you can open again here.",
     delete: "Delete",
     confirmDelete: "Delete this pattern from this browser?",
-    importJson: "Import saved file",
-    importSavedHint: "Choose an editable chart file you exported from this app.",
+    importJson: "Import chart file",
+    importSavedHint: "Choose a BeadLoom JSON chart exported from this app.",
+    newChart: "New chart",
     done: "Done",
     defaultTitle: "Untitled pattern",
     importedTitle: "Imported chart",
     duplicatedTitleSuffix: "copy"
   },
-  mardPalette: {
-    sectionLabel: "Mard palette",
-    heading: "Mard palette",
+  defaultPalette: {
+    sectionLabel: "Palette",
+    heading: "Palette",
     firstInGroup: "First in group: {{code}}",
     selectColor: "Select palette color {{code}}"
   }

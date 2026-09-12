@@ -1,17 +1,16 @@
 "use client";
 
 import type { ReactElement } from "react";
-import { ArrowLeftRight, Redo2, Trash2, Undo2 } from "lucide-react";
+import { ArrowLeftRight, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { readableTextHexOnBackgroundHex, type PatternLegendItem } from "@perlerloom/core";
-import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@perlerloom/ui";
+import { readableTextHexOnBackgroundHex, type PatternLegendItem } from "@beadloom/core";
+import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@beadloom/ui";
 import {
   drawingColorChromeBorderColorWhenActiveClass,
   drawingColorChromeBorderColorWhenIdleClass,
   drawingColorChromeBorderWidthClass
 } from "./active-drawing-color-chrome";
-import type { HistoryEntry } from "./pattern-editor-utils";
-import { MardPaletteGrid } from "./mard-palette-grid";
+import { PaletteGrid } from "./palette-grid";
 
 type EditorSidePanelsProps = {
   activeColor: string;
@@ -20,11 +19,7 @@ type EditorSidePanelsProps = {
   paletteByCode: Map<string, { hex: string }>;
   onApplyReplace: (fromCode: string) => void;
   onApplyDelete: (fromCode: string) => void;
-  historyEntries: HistoryEntry[];
-  activeHistoryIndex: number;
-  onJumpToHistory: (index: number) => void;
-  onUndo: () => void;
-  onRedo: () => void;
+  showPaletteHeading?: boolean;
   className?: string;
 };
 
@@ -35,19 +30,15 @@ export function EditorSidePanels({
   paletteByCode,
   onApplyReplace,
   onApplyDelete,
-  historyEntries,
-  activeHistoryIndex,
-  onJumpToHistory,
-  onUndo,
-  onRedo,
+  showPaletteHeading = true,
   className
 }: EditorSidePanelsProps): ReactElement {
   const { t } = useTranslation();
 
   return (
-    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-2", className)}>
+    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-[var(--chrome-gap)]", className)}>
       {legend.length > 0 ? (
-        <section aria-label={t("sidePanels.legendAria")} className="border-border bg-muted/80 shrink-0 rounded-xl border p-2">
+        <section aria-label={t("sidePanels.legendAria")} className="shrink-0">
           <h2 className="text-muted-foreground mb-1.5 text-xs font-semibold uppercase tracking-wide">{t("sidePanels.usedInChart")}</h2>
           <div className="flex flex-wrap gap-1.5">
             {legend.map((item) => {
@@ -58,7 +49,7 @@ export function EditorSidePanels({
               return (
                 <div
                   className={cn(
-                    "flex min-h-9 min-w-0 items-stretch overflow-hidden rounded-full bg-white shadow-sm transition",
+                    "bg-card flex min-h-9 min-w-0 items-stretch overflow-hidden rounded-full shadow-sm transition",
                     drawingColorChromeBorderWidthClass,
                     isActiveChip ? drawingColorChromeBorderColorWhenActiveClass : drawingColorChromeBorderColorWhenIdleClass
                   )}
@@ -83,7 +74,7 @@ export function EditorSidePanels({
                   <Tooltip>
                     <TooltipTrigger
                       aria-label={t("sidePanels.legendReplace", { fromCode: item.code, activeColor })}
-                      className="border-border text-brand-accent hover:bg-accent/90 inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center border-r bg-white transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                      className="border-border text-primary hover:bg-accent hover:text-accent-foreground inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center border-r bg-card transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                       type="button"
                       onClick={() => onApplyReplace(item.code)}
                     >
@@ -96,7 +87,7 @@ export function EditorSidePanels({
                   <Tooltip>
                     <TooltipTrigger
                       aria-label={t("sidePanels.legendDelete", { fromCode: item.code })}
-                      className="inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center bg-white text-red-800 transition hover:bg-red-100/80 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                      className="bg-card hover:bg-destructive/10 inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center text-destructive transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                       type="button"
                       onClick={() => onApplyDelete(item.code)}
                     >
@@ -113,55 +104,12 @@ export function EditorSidePanels({
         </section>
       ) : null}
 
-      <MardPaletteGrid activeColor={activeColor} className="w-full shrink-0" onSelectColor={onActiveColorChange} />
-
-      <section aria-label={t("sidePanels.historyTimelineAria")} className="border-border flex shrink-0 flex-col rounded-xl border bg-white p-2">
-        <div className="mb-1.5 flex shrink-0 items-center justify-between gap-2">
-          <h2 className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">{t("sidePanels.history")}</h2>
-          <div className="flex gap-1">
-            <Tooltip>
-              <TooltipTrigger
-                aria-label={t("sidePanels.undo")}
-                className="border-border bg-muted text-foreground rounded-lg border p-1.5 transition hover:bg-muted/80"
-                type="button"
-                onClick={onUndo}
-              >
-                <Undo2 className="h-4 w-4" aria-hidden="true" />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{t("sidePanels.undoTooltip")}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                aria-label={t("sidePanels.redo")}
-                className="border-border bg-muted text-foreground rounded-lg border p-1.5 transition hover:bg-muted/80"
-                type="button"
-                onClick={onRedo}
-              >
-                <Redo2 className="h-4 w-4" aria-hidden="true" />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{t("sidePanels.redoTooltip")}</TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          {historyEntries.map((entry, index) => (
-            <button
-              aria-current={index === activeHistoryIndex ? "step" : undefined}
-              className={cn(
-                "rounded-lg px-2 py-1.5 text-left text-xs transition",
-                index === activeHistoryIndex
-                  ? "bg-accent text-accent-foreground font-semibold"
-                  : "bg-muted text-muted-foreground hover:bg-accent/40"
-              )}
-              key={entry.id}
-              type="button"
-              onClick={() => onJumpToHistory(index)}
-            >
-              {t(entry.labelKey)}
-            </button>
-          ))}
-        </div>
-      </section>
+      <PaletteGrid
+        activeColor={activeColor}
+        className="w-full min-h-0"
+        showHeading={showPaletteHeading}
+        onSelectColor={onActiveColorChange}
+      />
     </div>
   );
 }

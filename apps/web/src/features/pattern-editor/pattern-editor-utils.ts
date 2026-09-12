@@ -1,39 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import { Eraser, Hand, Minus, PaintBucket, Pencil, Pipette } from "lucide-react";
-import {
-  readableTextHexOnBackgroundHex,
-  type ClusteringSpace,
-  type DownsamplingMode,
-  type MatchingSpace,
-  type PatternDocument,
-  type PatternPoint
-} from "@perlerloom/core";
+import { readableTextHexOnBackgroundHex, type PatternDocument, type PatternPoint } from "@beadloom/core";
 import { majorGridLineCellIndices } from "@/lib/major-grid-line-indices";
-import type { ResizeMode, SelectedSourceImage } from "./generate-import-dialog";
 
 export type EditorTool = "pencil" | "eraser" | "eyedropper" | "paintBucket" | "hand" | "line";
-
-export type ImportFormLayoutDefaults = {
-  resizeMode: ResizeMode;
-  targetWidth: string;
-  targetHeight: string;
-  scalePercent: string;
-};
-
-export type HistoryLabelKey =
-  | "history.generatedPattern"
-  | "history.pencilStroke"
-  | "history.eraserStroke"
-  | "history.bucketFill"
-  | "history.line"
-  | "history.replace"
-  | "history.delete";
-
-export type HistoryEntry = {
-  id: string;
-  labelKey: HistoryLabelKey;
-  pattern: PatternDocument;
-};
 
 export type CanvasLayout = {
   cellSize: number;
@@ -42,8 +12,7 @@ export type CanvasLayout = {
   height: number;
 };
 
-export const maxPatternDimension = 256;
-export const maxHistoryEntries = 24;
+export const CHART_ZOOM_STEPS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const baseCellSize = 28;
 const baseHeaderSize = 32;
 
@@ -53,34 +22,44 @@ const PATTERN_CANVAS_AXIS_LABEL_FONT_CELL_FRACTION = 0.32;
 const PATTERN_CANVAS_HIDE_BEAD_CODES_WHEN_CELL_BELOW_PX = 10;
 const PATTERN_CANVAS_MAJOR_GRID_STEP = 5;
 
-export const CHART_ZOOM_STEPS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2];
+export function readThemeColor(cssVariable: `--${string}`): string {
+  if (typeof document === "undefined") {
+    return `var(${cssVariable})`;
+  }
+  const value = getComputedStyle(document.documentElement).getPropertyValue(cssVariable).trim();
+  return value === "" ? `var(${cssVariable})` : value;
+}
 
 export function clonePattern(pattern: PatternDocument): PatternDocument {
   return {
     version: pattern.version,
     width: pattern.width,
     height: pattern.height,
-    paletteBrand: pattern.paletteBrand,
     cells: [...pattern.cells],
-    settings: { ...pattern.settings },
-    legend: pattern.legend === undefined ? undefined : pattern.legend.map((item) => ({ ...item }))
+    legend: pattern.legend === undefined ? undefined : pattern.legend.map((item) => ({ ...item })),
+    history: pattern.history === undefined
+      ? undefined
+      : {
+          past: pattern.history.past.map((snapshot) => ({
+            ...snapshot,
+            cells: [...snapshot.cells],
+            legend: snapshot.legend === undefined ? undefined : snapshot.legend.map((item) => ({ ...item }))
+          })),
+          present: {
+            ...pattern.history.present,
+            cells: [...pattern.history.present.cells],
+            legend:
+              pattern.history.present.legend === undefined
+                ? undefined
+                : pattern.history.present.legend.map((item) => ({ ...item }))
+          },
+          future: pattern.history.future.map((snapshot) => ({
+            ...snapshot,
+            cells: [...snapshot.cells],
+            legend: snapshot.legend === undefined ? undefined : snapshot.legend.map((item) => ({ ...item }))
+          }))
+        }
   };
-}
-
-export function createHistoryEntryId(): string {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-export function isMatchingSpace(value: string): value is MatchingSpace {
-  return value === "rgb" || value === "lab" || value === "hsl";
-}
-
-export function isClusteringSpace(value: string): value is ClusteringSpace {
-  return value === "rgb" || value === "lab";
-}
-
-export function isDownsamplingMode(value: string): value is DownsamplingMode {
-  return value === "nearest" || value === "gridMode";
 }
 
 export function getToolIcon(tool: EditorTool): LucideIcon {
@@ -146,110 +125,6 @@ export function createCanvasLayout(pattern: PatternDocument, zoom: number): Canv
   };
 }
 
-export function suggestTargetSize(width: number, height: number): { width: number; height: number; scalePercent: number } {
-  const scale = Math.min(1, maxPatternDimension / Math.max(width, height));
-  return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale)),
-    scalePercent: Math.max(1, Math.floor(scale * 100))
-  };
-}
-
-export function buildImportFormLayoutDefaults(
-  pattern: PatternDocument,
-  image: Pick<SelectedSourceImage, "width" | "height"> | null
-): ImportFormLayoutDefaults {
-  if (image === null) {
-    return {
-      resizeMode: "original",
-      targetWidth: String(pattern.width),
-      targetHeight: String(pattern.height),
-      scalePercent: "100"
-    };
-  }
-  const suggested = suggestTargetSize(image.width, image.height);
-  const large = image.width > maxPatternDimension || image.height > maxPatternDimension;
-  return {
-    resizeMode: large ? "dimensions" : "original",
-    targetWidth: String(suggested.width),
-    targetHeight: String(suggested.height),
-    scalePercent: String(suggested.scalePercent)
-  };
-}
-
-export function getTargetDimensions(
-  selectedSourceImage: SelectedSourceImage,
-  resizeMode: ResizeMode,
-  targetWidthInput: string,
-  targetHeightInput: string,
-  scalePercentInput: string
-): { width?: number; height?: number } | null {
-  if (resizeMode === "original") {
-    if (selectedSourceImage.width > maxPatternDimension || selectedSourceImage.height > maxPatternDimension) {
-      return null;
-    }
-    return {};
-  }
-
-  if (resizeMode === "scale") {
-    const scalePercent = Number(scalePercentInput);
-    if (!Number.isFinite(scalePercent) || scalePercent <= 0 || scalePercent > 100) {
-      return null;
-    }
-    const width = Math.max(1, Math.round((selectedSourceImage.width * scalePercent) / 100));
-    const height = Math.max(1, Math.round((selectedSourceImage.height * scalePercent) / 100));
-    if (width > maxPatternDimension || height > maxPatternDimension) {
-      return null;
-    }
-    return { width, height };
-  }
-
-  const width = Number(targetWidthInput);
-  const height = Number(targetHeightInput);
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > maxPatternDimension || height > maxPatternDimension) {
-    return null;
-  }
-  return { width, height };
-}
-
-export class ReadImageFailure extends Error {
-  readonly code: "canvas_unavailable";
-
-  constructor() {
-    super("canvas_unavailable");
-    this.name = "ReadImageFailure";
-    this.code = "canvas_unavailable";
-  }
-}
-
-export async function readImageFile(file: File): Promise<{ rgbBytes: ArrayBuffer; width: number; height: number }> {
-  const bitmap = await createImageBitmap(file);
-  const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const context = canvas.getContext("2d");
-  if (context === null) {
-    throw new ReadImageFailure();
-  }
-
-  context.imageSmoothingEnabled = false;
-  context.drawImage(bitmap, 0, 0);
-  bitmap.close?.();
-  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  const rgba = imageData.data;
-  const rgbByteLength = Math.floor(rgba.length / 4) * 3;
-  const rgbBytes = new ArrayBuffer(rgbByteLength);
-  const rgbView = new Uint8Array(rgbBytes);
-  let writeIndex = 0;
-  for (let index = 0; index < rgba.length; index += 4) {
-    rgbView[writeIndex] = rgba[index];
-    rgbView[writeIndex + 1] = rgba[index + 1];
-    rgbView[writeIndex + 2] = rgba[index + 2];
-    writeIndex += 3;
-  }
-  return { rgbBytes, width: canvas.width, height: canvas.height };
-}
-
 function pointCenter(point: PatternPoint, layout: CanvasLayout): { x: number; y: number } {
   return {
     x: layout.headerSize + point.column * layout.cellSize + layout.cellSize / 2,
@@ -257,8 +132,32 @@ function pointCenter(point: PatternPoint, layout: CanvasLayout): { x: number; y:
   };
 }
 
+function devicePixelRatioScale(): number {
+  if (typeof window === "undefined") {
+    return 1;
+  }
+  const ratio = window.devicePixelRatio;
+  if (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio < 1) {
+    return 1;
+  }
+  return ratio;
+}
+
+function syncPatternCanvasBitmap(canvas: HTMLCanvasElement, layout: CanvasLayout, ratio: number): void {
+  const pixelWidth = Math.round(layout.width * ratio);
+  const pixelHeight = Math.round(layout.height * ratio);
+  if (canvas.width !== pixelWidth) {
+    canvas.width = pixelWidth;
+  }
+  if (canvas.height !== pixelHeight) {
+    canvas.height = pixelHeight;
+  }
+  canvas.style.width = `${layout.width}px`;
+  canvas.style.height = `${layout.height}px`;
+}
+
 function drawOuterMajorLines(context: CanvasRenderingContext2D, pattern: PatternDocument, layout: CanvasLayout): void {
-  context.strokeStyle = "#b85b52";
+  context.strokeStyle = readThemeColor("--primary");
   context.lineWidth = 2;
 
   function strokeVerticalLine(atColumnIndex: number): void {
@@ -315,14 +214,19 @@ export function drawPatternCanvas(
     return;
   }
 
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#fffaf2";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#e7ded1";
-  context.fillRect(0, 0, canvas.width, layout.headerSize);
-  context.fillRect(0, canvas.height - layout.headerSize, canvas.width, layout.headerSize);
-  context.fillRect(0, 0, layout.headerSize, canvas.height);
-  context.fillRect(canvas.width - layout.headerSize, 0, layout.headerSize, canvas.height);
+  const ratio = devicePixelRatioScale();
+  syncPatternCanvasBitmap(canvas, layout, ratio);
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.imageSmoothingEnabled = false;
+
+  context.clearRect(0, 0, layout.width, layout.height);
+  context.fillStyle = readThemeColor("--background");
+  context.fillRect(0, 0, layout.width, layout.height);
+  context.fillStyle = readThemeColor("--muted");
+  context.fillRect(0, 0, layout.width, layout.headerSize);
+  context.fillRect(0, layout.height - layout.headerSize, layout.width, layout.headerSize);
+  context.fillRect(0, 0, layout.headerSize, layout.height);
+  context.fillRect(layout.width - layout.headerSize, 0, layout.headerSize, layout.height);
   context.textAlign = "center";
   context.textBaseline = "middle";
   const axisLabelFontPx = Math.round(layout.cellSize * PATTERN_CANVAS_AXIS_LABEL_FONT_CELL_FRACTION);
@@ -330,27 +234,29 @@ export function drawPatternCanvas(
 
   for (let column = 0; column < pattern.width; column += 1) {
     const x = layout.headerSize + column * layout.cellSize + layout.cellSize / 2;
-    context.fillStyle = "#6b5b4b";
+    context.fillStyle = readThemeColor("--foreground");
     context.fillText(String(column + 1), x, layout.headerSize / 2);
-    context.fillText(String(column + 1), x, canvas.height - layout.headerSize / 2);
+    context.fillText(String(column + 1), x, layout.height - layout.headerSize / 2);
   }
 
   for (let row = 0; row < pattern.height; row += 1) {
     const y = layout.headerSize + row * layout.cellSize + layout.cellSize / 2;
-    context.fillStyle = "#6b5b4b";
+    context.fillStyle = readThemeColor("--foreground");
     context.fillText(String(row + 1), layout.headerSize / 2, y);
-    context.fillText(String(row + 1), canvas.width - layout.headerSize / 2, y);
+    context.fillText(String(row + 1), layout.width - layout.headerSize / 2, y);
   }
 
+  const emptyCellFill = readThemeColor("--card");
+  const gridStroke = readThemeColor("--border");
   for (let row = 0; row < pattern.height; row += 1) {
     for (let column = 0; column < pattern.width; column += 1) {
       const index = row * pattern.width + column;
       const code = pattern.cells[index];
       const x = layout.headerSize + column * layout.cellSize;
       const y = layout.headerSize + row * layout.cellSize;
-      context.fillStyle = code === null ? "#ffffff" : paletteByCode.get(code)?.hex ?? "#ffffff";
+      context.fillStyle = code === null ? emptyCellFill : paletteByCode.get(code)?.hex ?? "#ffffff";
       context.fillRect(x, y, layout.cellSize, layout.cellSize);
-      context.strokeStyle = "#d9d0c5";
+      context.strokeStyle = gridStroke;
       context.lineWidth = 1;
       context.strokeRect(x, y, layout.cellSize, layout.cellSize);
     }
@@ -380,7 +286,7 @@ export function drawPatternCanvas(
   drawOuterMajorLines(context, pattern, layout);
 
   if (lineStartPoint !== null && linePreviewPoint !== null) {
-    context.strokeStyle = "#111827";
+    context.strokeStyle = readThemeColor("--foreground");
     context.lineWidth = 3;
     context.beginPath();
     context.moveTo(pointCenter(lineStartPoint, layout).x, pointCenter(lineStartPoint, layout).y);

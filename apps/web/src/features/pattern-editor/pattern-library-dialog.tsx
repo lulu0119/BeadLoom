@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Copy, Download, ImageDown, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { PatternDocument } from "@perlerloom/core";
-import { mardPalette } from "@perlerloom/palettes";
+import type { PatternDocument } from "@beadloom/core";
+import { defaultPalette } from "@beadloom/palettes";
 import {
   Button,
   Dialog,
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
   cn
-} from "@perlerloom/ui";
+} from "@beadloom/ui";
 import { createCanvasLayout, drawPatternCanvas } from "@/features/pattern-editor/pattern-editor-utils";
 import type { PatternRecord } from "@/lib/pattern-storage";
 
@@ -60,11 +60,12 @@ export type PatternLibraryDialogProps = {
   onImportJsonFile: (file: File) => void | Promise<void>;
   onExportJson: (patternId: string) => void;
   onExportPng: (patternId: string) => void;
+  onNewChart: () => void;
 };
 
 function PatternThumbnail({ pattern }: { pattern: PatternDocument }): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const paletteByCode = useMemo(() => new Map(mardPalette.map((color) => [color.code, color])), []);
+  const paletteByCode = useMemo(() => new Map(defaultPalette.map((color) => [color.code, color])), []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -85,7 +86,7 @@ function PatternThumbnail({ pattern }: { pattern: PatternDocument }): ReactEleme
     canvas.style.height = `${Math.round(layout.height * fitScale)}px`;
   }, [paletteByCode, pattern]);
 
-  return <canvas className="border-border block shrink-0 rounded border bg-white shadow-sm" ref={canvasRef} />;
+  return <canvas className="border-primary/20 bg-card block shrink-0 rounded-lg border shadow-sm" ref={canvasRef} />;
 }
 
 export function PatternLibraryDialog({
@@ -99,7 +100,8 @@ export function PatternLibraryDialog({
   onDeletePattern,
   onImportJsonFile,
   onExportJson,
-  onExportPng
+  onExportPng,
+  onNewChart
 }: PatternLibraryDialogProps): ReactElement {
   const { t } = useTranslation();
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -133,7 +135,7 @@ export function PatternLibraryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(720px,90vh)] flex-col gap-3 sm:max-w-2xl" closeLabel={t("dialog.close")}>
+      <DialogContent className="flex max-h-[min(720px,90vh)] flex-col sm:max-w-2xl" closeLabel={t("dialog.close")}>
         <DialogHeader>
           <DialogTitle>{t("library.dialogTitle")}</DialogTitle>
           <DialogDescription>{t("library.dialogDescription")}</DialogDescription>
@@ -188,10 +190,10 @@ export function PatternLibraryDialog({
               {filteredSorted.map((record) => (
                 <li
                   className={cn(
-                    "flex flex-col gap-3 rounded-lg border bg-white p-3 shadow-sm",
+                    "flex flex-col gap-3 rounded-[var(--dialog-inner-radius)] border p-3 shadow-sm",
                     record.id === activePatternId
-                      ? "border-primary/45 bg-primary/5"
-                      : "border-border"
+                      ? "border-primary/40 bg-primary/10"
+                      : "border-primary/15 bg-card/55 backdrop-blur-md"
                   )}
                   key={record.id}
                 >
@@ -265,18 +267,29 @@ export function PatternLibraryDialog({
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            title={t("library.importSavedHint")}
-            aria-label={t("library.importSavedHint")}
-            onClick={() => {
-              importInputRef.current?.click();
-            }}
-          >
-            <Upload className="mr-2 h-4 w-4" aria-hidden="true" />
-            {t("library.importJson")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                onOpenChange(false);
+                onNewChart();
+              }}
+            >
+              {t("library.newChart")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              title={t("library.importSavedHint")}
+              onClick={() => {
+                importInputRef.current?.click();
+              }}
+            >
+              <Upload className="mr-2 h-4 w-4" aria-hidden="true" />
+              {t("library.importJson")}
+            </Button>
+          </div>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             {t("library.done")}
           </Button>

@@ -2,9 +2,9 @@ import {
   buildLegend,
   readableTextHexOnBackgroundHex,
   type PatternDocument
-} from "@perlerloom/core";
-import type { BeadColor } from "@perlerloom/palettes";
-import { createCanvasLayout, drawPatternCanvas, type CanvasLayout } from "@/features/pattern-editor/pattern-editor-utils";
+} from "@beadloom/core";
+import type { BeadColor } from "@beadloom/palettes";
+import { createCanvasLayout, drawPatternCanvas, readThemeColor, type CanvasLayout } from "@/features/pattern-editor/pattern-editor-utils";
 
 const exportMarginPx = 28;
 const sectionGapPx = 28;
@@ -135,7 +135,7 @@ function drawLegendChip(
   leftSectionWidth: number
 ): void {
   const textOnSwatch = readableTextHexOnBackgroundHex(swatchHex);
-  context.fillStyle = "#ffffff";
+  context.fillStyle = readThemeColor("--card");
   context.beginPath();
   context.roundRect(originX, originY, chipWidth, legendChipHeightPx, legendChipRadiusPx);
   context.fill();
@@ -148,7 +148,7 @@ function drawLegendChip(
   context.fillRect(originX, originY, leftSectionWidth, legendChipHeightPx);
   context.restore();
 
-  context.strokeStyle = "#d4c9bc";
+  context.strokeStyle = readThemeColor("--border");
   context.lineWidth = 1;
   context.beginPath();
   context.roundRect(originX, originY, chipWidth, legendChipHeightPx, legendChipRadiusPx);
@@ -161,7 +161,7 @@ function drawLegendChip(
   context.fillText(code, originX + leftSectionWidth / 2, originY + legendChipHeightPx / 2);
 
   context.font = legendCountFont;
-  context.fillStyle = "#2a241d";
+  context.fillStyle = readThemeColor("--foreground");
   context.fillText(`×${String(count)}`, originX + leftSectionWidth + (chipWidth - leftSectionWidth) / 2, originY + legendChipHeightPx / 2);
 }
 
@@ -312,7 +312,7 @@ export async function renderPatternExportToPngBlob(
   outputCanvas.height = Math.ceil(logicalCanvasHeight * exportPixelRatio);
   context.scale(exportPixelRatio, exportPixelRatio);
 
-  context.fillStyle = "#fffaf2";
+  context.fillStyle = readThemeColor("--background");
   context.fillRect(0, 0, logicalCanvasWidth, logicalCanvasHeight);
 
   const centerX = logicalCanvasWidth / 2;
@@ -327,17 +327,17 @@ export async function renderPatternExportToPngBlob(
   context.textAlign = "center";
   context.textBaseline = "top";
   context.font = headerTitleFont;
-  context.fillStyle = "#2a241d";
+  context.fillStyle = readThemeColor("--foreground");
   context.fillText(branding.siteTitle, centerX, cursorY);
   cursorY += headerTitleLinePx;
 
   context.font = headerUrlFont;
-  context.fillStyle = "#6b5f54";
+  context.fillStyle = readThemeColor("--muted-foreground");
   context.fillText(branding.siteUrl, centerX, cursorY);
   cursorY += headerUrlLinePx;
 
   context.font = headerDescFont;
-  context.fillStyle = "#5c534a";
+  context.fillStyle = readThemeColor("--muted-foreground");
   if (descriptionLines.length > 0) {
     cursorY += headerGapBeforeDescriptionPx;
     for (const line of descriptionLines) {
