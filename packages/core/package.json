@@ -1,5 +1,5 @@
 {
-  "name": "@perlerloom/core",
+  "name": "@beadloom/core",
   "version": "0.1.0",
   "license": "AGPL-3.0-or-later",
   "private": true,
@@ -13,7 +13,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@perlerloom/palettes": "workspace:*"
+    "@beadloom/palettes": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

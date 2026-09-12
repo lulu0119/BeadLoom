@@ -1,4 +1,4 @@
-import mardPaletteData from "./mard.json";
+import paletteData from "./palette.json";
 
 export type RgbColor = {
   red: number;
@@ -19,7 +19,6 @@ export type LabColor = {
 };
 
 export type BeadColor = {
-  brand: "mard";
   code: string;
   name: string;
   hex: string;
@@ -28,15 +27,15 @@ export type BeadColor = {
   lab: LabColor;
 };
 
-type MardPaletteJson = BeadColor[];
+type PaletteJson = BeadColor[];
 
-export const mardPalette: BeadColor[] = validatePalette(mardPaletteData as MardPaletteJson);
+export const defaultPalette: BeadColor[] = validatePalette(paletteData as PaletteJson);
 
-export function normalizeMardRows(rows: string[]): BeadColor[] {
+export function normalizePaletteRows(rows: string[]): BeadColor[] {
   const palette = rows.map((row, rowIndex) => {
     const columns = row.split(",");
     if (columns.length < 5) {
-      throw new Error(`Mard row ${rowIndex + 1} is missing required columns.`);
+      throw new Error(`Palette row ${rowIndex + 1} is missing required columns.`);
     }
 
     const [code, name, redRaw, greenRaw, blueRaw] = columns;
@@ -47,7 +46,6 @@ export function normalizeMardRows(rows: string[]): BeadColor[] {
     };
 
     return {
-      brand: "mard" as const,
       code,
       name,
       hex: rgbToHex(rgb),
@@ -135,7 +133,7 @@ export function rgbToLab(rgb: RgbColor): LabColor {
 function parseRgbChannel(rawValue: string, rowIndex: number): number {
   const channel = Number(rawValue);
   if (!Number.isInteger(channel) || channel < 0 || channel > 255) {
-    throw new Error(`Mard row ${rowIndex + 1} contains invalid RGB channel ${rawValue}.`);
+    throw new Error(`Palette row ${rowIndex + 1} contains invalid RGB channel ${rawValue}.`);
   }
   return channel;
 }

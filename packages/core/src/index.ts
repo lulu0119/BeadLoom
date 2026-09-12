@@ -1,36 +1,21 @@
-import {
-  rgbToHex as paletteRgbToHex,
-  rgbToHsl,
-  rgbToLab,
-  type BeadColor,
-  type RgbColor
-} from "@perlerloom/palettes";
+import { rgbToHex as paletteRgbToHex, rgbToHsl, rgbToLab, type BeadColor, type RgbColor } from "@beadloom/palettes";
 
 import { buildLegend, type PatternLegendItem } from "./build-legend";
 
 export type { PatternLegendItem };
 export { buildLegend };
 
+export const MAX_PATTERN_SIZE = 256;
+
 export type MatchingSpace = "rgb" | "lab" | "hsl";
-export type ClusteringSpace = "rgb" | "lab";
-export type DownsamplingMode = "nearest" | "gridMode";
 
 export type PatternCell = string | null;
-
-export type PatternSettings = {
-  targetColorCount: number;
-  matchingSpace: MatchingSpace;
-  clusteringSpace: ClusteringSpace;
-  downsamplingMode: DownsamplingMode;
-};
 
 export type PatternDocument = {
   version: 1;
   width: number;
   height: number;
-  paletteBrand: "mard";
   cells: PatternCell[];
-  settings: PatternSettings;
   legend?: PatternLegendItem[];
   history?: PatternHistory;
 };
@@ -48,82 +33,27 @@ export type PatternHistory = {
   future: PatternSnapshot[];
 };
 
-export type ConvertImageInput = {
-  pixels: RgbColor[];
-  width: number;
-  height: number;
-  targetWidth?: number;
-  targetHeight?: number;
-  palette: BeadColor[];
-  settings: PatternSettings;
+export type PatternCellWrite = {
+  column: number;
+  row: number;
+  code: PatternCell;
 };
 
-const MAX_PATTERN_SIZE = 256;
-
-type PaletteVector = {
-  code: string;
-  rgb: RgbColor;
-  vec: readonly [number, number, number];
-};
-
-function buildPaletteVectors(palette: BeadColor[], matchingSpace: MatchingSpace): PaletteVector[] {
-  return palette.map((color) => {
-    if (matchingSpace === "lab") {
-      return { code: color.code, rgb: color.rgb, vec: [color.lab.lightness, color.lab.greenRed, color.lab.blueYellow] as const };
-    }
-    if (matchingSpace === "hsl") {
-      return { code: color.code, rgb: color.rgb, vec: [color.hsl.hue, color.hsl.saturation, color.hsl.lightness] as const };
-    }
-    return { code: color.code, rgb: color.rgb, vec: [color.rgb.red, color.rgb.green, color.rgb.blue] as const };
-  });
-}
-
-function nearestPaletteCodeFromVectors(sourceRgb: RgbColor, paletteVectors: PaletteVector[], matchingSpace: MatchingSpace): string {
-  let bestCode = paletteVectors[0].code;
-  let bestDistance = Number.POSITIVE_INFINITY;
-
-  if (matchingSpace === "lab") {
-    const sourceLab = rgbToLab(sourceRgb);
-    const sourceVec: readonly [number, number, number] = [sourceLab.lightness, sourceLab.greenRed, sourceLab.blueYellow];
-    for (const entry of paletteVectors) {
-      const distance = squaredDistanceVec3(sourceVec, entry.vec);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestCode = entry.code;
-      }
-    }
-    return bestCode;
+export function createBlankPattern(width: number, height: number): PatternDocument {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+    throw new Error("Pattern dimensions must be positive integers.");
   }
-
-  if (matchingSpace === "hsl") {
-    const sourceHsl = rgbToHsl(sourceRgb);
-    const sourceVec: readonly [number, number, number] = [sourceHsl.hue, sourceHsl.saturation, sourceHsl.lightness];
-    for (const entry of paletteVectors) {
-      const distance = squaredDistanceVec3(sourceVec, entry.vec);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestCode = entry.code;
-      }
-    }
-    return bestCode;
+  if (width > MAX_PATTERN_SIZE || height > MAX_PATTERN_SIZE) {
+    throw new Error(`Pattern dimensions must not exceed ${MAX_PATTERN_SIZE} by ${MAX_PATTERN_SIZE}.`);
   }
-
-  const sourceVec: readonly [number, number, number] = [sourceRgb.red, sourceRgb.green, sourceRgb.blue];
-  for (const entry of paletteVectors) {
-    const distance = squaredDistanceVec3(sourceVec, entry.vec);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestCode = entry.code;
-    }
-  }
-  return bestCode;
-}
-
-function squaredDistanceVec3(left: readonly [number, number, number], right: readonly [number, number, number]): number {
-  const delta0 = left[0] - right[0];
-  const delta1 = left[1] - right[1];
-  const delta2 = left[2] - right[2];
-  return delta0 * delta0 + delta1 * delta1 + delta2 * delta2;
+  const cells: PatternCell[] = Array.from({ length: width * height }, () => null);
+  return {
+    version: 1,
+    width,
+    height,
+    cells,
+    legend: buildLegend(cells)
+  };
 }
 
 export function hexToRgb(hex: string): RgbColor {
@@ -183,72 +113,6 @@ export function findNearestPaletteColor(source: RgbColor, palette: BeadColor[], 
   }
 
   return nearestColor;
-}
-
-export function convertImageToPattern(input: ConvertImageInput): PatternDocument {
-  validateConversionInput(input);
-
-  const targetWidth = input.targetWidth ?? input.width;
-  const targetHeight = input.targetHeight ?? input.height;
-  const sampledPixels = downsamplePixels(input.pixels, input.width, input.height, targetWidth, targetHeight, input.settings.downsamplingMode);
-  const clusters = kMeansCluster(sampledPixels, input.settings.targetColorCount, input.settings.clusteringSpace);
-  const paletteVectors = buildPaletteVectors(input.palette, input.settings.matchingSpace);
-  const cells = sampledPixels.map((pixel) => {
-    const cluster = findNearestRgb(pixel, clusters, input.settings.clusteringSpace);
-    return nearestPaletteCodeFromVectors(cluster, paletteVectors, input.settings.matchingSpace);
-  });
-
-  return withLegend({
-    version: 1,
-    width: targetWidth,
-    height: targetHeight,
-    paletteBrand: "mard",
-    cells,
-    settings: input.settings
-  });
-}
-
-export function kMeansCluster(pixels: RgbColor[], targetColorCount: number, clusteringSpace: ClusteringSpace): RgbColor[] {
-  if (targetColorCount < 1) {
-    throw new Error("Target color count must be at least 1.");
-  }
-
-  const uniquePixels = uniqueRgbPixels(pixels);
-  if (uniquePixels.length <= targetColorCount) {
-    return uniquePixels;
-  }
-
-  const samplePixels = samplePixelsForClustering(pixels, 8000);
-  let centers = uniquePixels.slice(0, targetColorCount);
-
-  for (let iteration = 0; iteration < 8; iteration += 1) {
-    const groups = centers.map((): RgbColor[] => []);
-
-    for (const pixel of samplePixels) {
-      const centerIndex = nearestRgbIndex(pixel, centers, clusteringSpace);
-      groups[centerIndex].push(pixel);
-    }
-
-    centers = groups.map((group, index) => (group.length === 0 ? centers[index] : averageRgb(group)));
-  }
-
-  return centers;
-}
-
-function samplePixelsForClustering(pixels: RgbColor[], maxSamples: number): RgbColor[] {
-  if (pixels.length <= maxSamples) {
-    return pixels;
-  }
-
-  const step = Math.max(1, Math.floor(pixels.length / maxSamples));
-  const sampled: RgbColor[] = [];
-  for (let index = 0; index < pixels.length; index += step) {
-    sampled.push(pixels[index]);
-    if (sampled.length >= maxSamples) {
-      break;
-    }
-  }
-  return sampled;
 }
 
 export function replacePatternColor(
@@ -314,13 +178,12 @@ export function bucketFillPattern(
   return withHistory(pattern, withLegend({ ...snapshotOf(pattern), cells }), existingHistory);
 }
 
-export function drawPatternLine(
+export function applyLineToCells(
   pattern: PatternDocument,
   startPoint: PatternPoint,
   endPoint: PatternPoint,
-  targetCode: PatternCell,
-  existingHistory?: PatternHistory
-): PatternDocument {
+  targetCode: PatternCell
+): PatternCell[] {
   const cells = [...pattern.cells];
   const columnDelta = Math.abs(endPoint.column - startPoint.column);
   const rowDelta = Math.abs(endPoint.row - startPoint.row);
@@ -349,26 +212,65 @@ export function drawPatternLine(
     }
   }
 
+  return cells;
+}
+
+export function commitPatternEdit(
+  previous: PatternDocument,
+  nextPattern: PatternSnapshot,
+  existingHistory?: PatternHistory
+): PatternDocument {
+  return withHistory(previous, withLegend(nextPattern), existingHistory);
+}
+
+export function drawPatternLine(
+  pattern: PatternDocument,
+  startPoint: PatternPoint,
+  endPoint: PatternPoint,
+  targetCode: PatternCell,
+  existingHistory?: PatternHistory
+): PatternDocument {
+  const cells = applyLineToCells(pattern, startPoint, endPoint, targetCode);
   return withHistory(pattern, withLegend({ ...snapshotOf(pattern), cells }), existingHistory);
 }
 
-export function selectPatternRectangle(pattern: PatternDocument, startPoint: PatternPoint, endPoint: PatternPoint): number[] {
-  const left = Math.min(startPoint.column, endPoint.column);
-  const right = Math.max(startPoint.column, endPoint.column);
-  const top = Math.min(startPoint.row, endPoint.row);
-  const bottom = Math.max(startPoint.row, endPoint.row);
-  const indexes: number[] = [];
+export function setPatternCells(
+  pattern: PatternDocument,
+  writes: PatternCellWrite[],
+  existingHistory?: PatternHistory
+): PatternDocument {
+  const cells = [...pattern.cells];
+  for (const write of writes) {
+    const point = { column: write.column, row: write.row };
+    if (!isPointInside(pattern, point)) {
+      continue;
+    }
+    cells[pointToIndex(pattern, point)] = write.code;
+  }
+  return withHistory(pattern, withLegend({ ...snapshotOf(pattern), cells }), existingHistory);
+}
 
-  for (let row = top; row <= bottom; row += 1) {
-    for (let column = left; column <= right; column += 1) {
-      const point = { column, row };
-      if (isPointInside(pattern, point)) {
-        indexes.push(pointToIndex(pattern, point));
-      }
+export function resizePattern(pattern: PatternDocument, width: number, height: number, existingHistory?: PatternHistory): PatternDocument {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+    throw new Error("Pattern dimensions must be positive integers.");
+  }
+  if (width > MAX_PATTERN_SIZE || height > MAX_PATTERN_SIZE) {
+    throw new Error(`Pattern dimensions must not exceed ${MAX_PATTERN_SIZE} by ${MAX_PATTERN_SIZE}.`);
+  }
+  if (width === pattern.width && height === pattern.height) {
+    return pattern;
+  }
+
+  const cells: PatternCell[] = Array.from({ length: width * height }, () => null);
+  const copyWidth = Math.min(width, pattern.width);
+  const copyHeight = Math.min(height, pattern.height);
+  for (let row = 0; row < copyHeight; row += 1) {
+    for (let column = 0; column < copyWidth; column += 1) {
+      cells[row * width + column] = pattern.cells[row * pattern.width + column];
     }
   }
 
-  return indexes;
+  return withHistory(pattern, withLegend({ version: 1, width, height, cells }), existingHistory);
 }
 
 export function undoPatternHistory(history: PatternHistory): { pattern: PatternDocument; history: PatternHistory } {
@@ -401,88 +303,6 @@ export function redoPatternHistory(history: PatternHistory): { pattern: PatternD
   return { pattern: { ...next, history: nextHistory }, history: nextHistory };
 }
 
-function validateConversionInput(input: ConvertImageInput): void {
-  if (input.width < 1 || input.height < 1 || input.pixels.length !== input.width * input.height) {
-    throw new Error("Image dimensions do not match pixel data.");
-  }
-  if (input.settings.targetColorCount < 1 || input.settings.targetColorCount > input.palette.length) {
-    throw new Error("Target color count must be between 1 and the selected palette size.");
-  }
-
-  const targetWidth = input.targetWidth ?? input.width;
-  const targetHeight = input.targetHeight ?? input.height;
-  const sourceExceedsLimit = input.width > MAX_PATTERN_SIZE || input.height > MAX_PATTERN_SIZE;
-  if (sourceExceedsLimit && (input.targetWidth === undefined || input.targetHeight === undefined)) {
-    throw new Error("Images above 256 cells require explicit target dimensions.");
-  }
-  if (targetWidth > MAX_PATTERN_SIZE || targetHeight > MAX_PATTERN_SIZE) {
-    throw new Error("Target dimensions must not exceed 256 by 256.");
-  }
-}
-
-function downsamplePixels(
-  pixels: RgbColor[],
-  width: number,
-  height: number,
-  targetWidth: number,
-  targetHeight: number,
-  mode: DownsamplingMode
-): RgbColor[] {
-  if (width === targetWidth && height === targetHeight) {
-    return pixels;
-  }
-
-  const output: RgbColor[] = [];
-  for (let row = 0; row < targetHeight; row += 1) {
-    for (let column = 0; column < targetWidth; column += 1) {
-      output.push(mode === "nearest" ? nearestPixel(pixels, width, height, column, row, targetWidth, targetHeight) : gridModePixel(pixels, width, height, column, row, targetWidth, targetHeight));
-    }
-  }
-
-  return output;
-}
-
-function nearestPixel(
-  pixels: RgbColor[],
-  width: number,
-  height: number,
-  column: number,
-  row: number,
-  targetWidth: number,
-  targetHeight: number
-): RgbColor {
-  const sourceColumn = Math.min(width - 1, Math.floor((column + 0.5) * (width / targetWidth)));
-  const sourceRow = Math.min(height - 1, Math.floor((row + 0.5) * (height / targetHeight)));
-  return pixels[sourceRow * width + sourceColumn];
-}
-
-function gridModePixel(
-  pixels: RgbColor[],
-  width: number,
-  height: number,
-  column: number,
-  row: number,
-  targetWidth: number,
-  targetHeight: number
-): RgbColor {
-  const left = Math.floor((column * width) / targetWidth);
-  const right = Math.max(left + 1, Math.ceil(((column + 1) * width) / targetWidth));
-  const top = Math.floor((row * height) / targetHeight);
-  const bottom = Math.max(top + 1, Math.ceil(((row + 1) * height) / targetHeight));
-  const counts = new Map<string, { color: RgbColor; count: number }>();
-
-  for (let sourceRow = top; sourceRow < Math.min(bottom, height); sourceRow += 1) {
-    for (let sourceColumn = left; sourceColumn < Math.min(right, width); sourceColumn += 1) {
-      const color = pixels[sourceRow * width + sourceColumn];
-      const key = rgbToHex(color);
-      const current = counts.get(key);
-      counts.set(key, { color, count: (current?.count ?? 0) + 1 });
-    }
-  }
-
-  return [...counts.values()].sort((leftCount, rightCount) => rightCount.count - leftCount.count)[0].color;
-}
-
 function colorDistance(source: RgbColor, color: BeadColor, matchingSpace: MatchingSpace): number {
   if (matchingSpace === "lab") {
     const sourceLab = rgbToLab(source);
@@ -501,72 +321,8 @@ function colorDistance(source: RgbColor, color: BeadColor, matchingSpace: Matchi
   return squaredDistance([source.red, source.green, source.blue], [color.rgb.red, color.rgb.green, color.rgb.blue]);
 }
 
-function findNearestRgb(source: RgbColor, candidates: RgbColor[], clusteringSpace: ClusteringSpace): RgbColor {
-  return candidates[nearestRgbIndex(source, candidates, clusteringSpace)];
-}
-
-function nearestRgbIndex(source: RgbColor, candidates: RgbColor[], clusteringSpace: ClusteringSpace): number {
-  let nearestIndex = 0;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-
-  for (let index = 0; index < candidates.length; index += 1) {
-    const candidate = candidates[index];
-    const distance =
-      clusteringSpace === "lab"
-        ? squaredLabDistance(source, candidate)
-        : squaredDistance([source.red, source.green, source.blue], [candidate.red, candidate.green, candidate.blue]);
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearestIndex = index;
-    }
-  }
-
-  return nearestIndex;
-}
-
-function squaredLabDistance(left: RgbColor, right: RgbColor): number {
-  const leftLab = rgbToLab(left);
-  const rightLab = rgbToLab(right);
-  return squaredDistance(
-    [leftLab.lightness, leftLab.greenRed, leftLab.blueYellow],
-    [rightLab.lightness, rightLab.greenRed, rightLab.blueYellow]
-  );
-}
-
 function squaredDistance(left: number[], right: number[]): number {
   return left.reduce((total, value, index) => total + (value - right[index]) ** 2, 0);
-}
-
-function uniqueRgbPixels(pixels: RgbColor[]): RgbColor[] {
-  const seen = new Set<string>();
-  const uniquePixels: RgbColor[] = [];
-
-  for (const pixel of pixels) {
-    const key = rgbToHex(pixel);
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniquePixels.push(pixel);
-    }
-  }
-
-  return uniquePixels;
-}
-
-function averageRgb(pixels: RgbColor[]): RgbColor {
-  const total = pixels.reduce(
-    (sum, pixel) => ({
-      red: sum.red + pixel.red,
-      green: sum.green + pixel.green,
-      blue: sum.blue + pixel.blue
-    }),
-    { red: 0, green: 0, blue: 0 }
-  );
-
-  return {
-    red: Math.round(total.red / pixels.length),
-    green: Math.round(total.green / pixels.length),
-    blue: Math.round(total.blue / pixels.length)
-  };
 }
 
 function withLegend(pattern: PatternSnapshot): PatternSnapshot {
@@ -597,9 +353,7 @@ function snapshotOf(pattern: PatternDocument): PatternSnapshot {
     version: pattern.version,
     width: pattern.width,
     height: pattern.height,
-    paletteBrand: pattern.paletteBrand,
     cells: [...pattern.cells],
-    settings: pattern.settings,
     legend: buildLegend(pattern.cells)
   };
 }
@@ -611,5 +365,3 @@ function pointToIndex(pattern: Pick<PatternDocument, "width">, point: PatternPoi
 function isPointInside(pattern: Pick<PatternDocument, "width" | "height">, point: PatternPoint): boolean {
   return point.column >= 0 && point.column < pattern.width && point.row >= 0 && point.row < pattern.height;
 }
-
-export { createBlankPattern } from "./create-blank-pattern";
