@@ -28,7 +28,7 @@ jobs:
           node-version: "24"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @perlerloom/web build
+      - run: pnpm --filter @beadloom/web build
         env:
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
       - uses: actions/upload-pages-artifact@v5

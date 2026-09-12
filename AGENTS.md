@@ -1,4 +1,4 @@
-# AGENTS.md — perlerloom
+# AGENTS.md — BeadLoom
 
 Instructions for AI agents and humans working in this repository.
 
