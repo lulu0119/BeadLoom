@@ -1,4 +1,5 @@
-import type { AgentEvent, AgentInput } from "@apeira/core";
+import type { Message } from "@xsai/text";
+import type { AgentLogEvent } from "./agent-debug-log";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   AGENT_LOG_KEEP_BLOBS,
@@ -33,13 +34,12 @@ afterEach(() => {
   setAgentLogBackendForTesting(null);
 });
 
-function userInputWithImage(imageUrl: string): AgentInput {
+function userInputWithImage(imageUrl: string): Message {
   return {
     role: "user",
-    type: "message",
     content: [
-      { type: "input_text", text: "draw" },
-      { type: "input_image", image_url: imageUrl }
+      { type: "text", text: "draw" },
+      { type: "image", data: imageUrl }
     ]
   };
 }
@@ -60,7 +60,6 @@ describe("turn lifecycle", () => {
       type: "tool-call.done",
       turnId: "turn-1",
       toolCallId: "call-1",
-      toolCallType: "function",
       toolName: "look_at_board",
       args: "{}"
     });
@@ -68,8 +67,6 @@ describe("turn lifecycle", () => {
       type: "tool-result.done",
       turnId: "turn-1",
       toolCallId: "call-1",
-      toolName: "look_at_board",
-      args: {},
       result: "{}"
     });
     await logAgentEvent({ type: "step.done", turnId: "turn-1" });
@@ -128,13 +125,9 @@ describe("step requests", () => {
       userInputWithImage(dataUrl),
       {
         role: "assistant",
-        type: "message",
-        content: "",
-        tool_calls: [
-          { id: "call-1", type: "function", function: { name: "look_at_board", arguments: "{}" } }
-        ]
+        content: [{ type: "tool-call", id: "call-1", callId: "call-1", name: "look_at_board", arguments: "{}" }]
       },
-      { role: "user", type: "message", content: "again" }
+      { role: "user", content: "again" }
     ]);
     await logAgentEvent({ type: "turn.start", turnId: "turn-4" });
     await logStepRequest({
@@ -183,8 +176,8 @@ describe("step requests", () => {
   });
 
   it("prefixes instructions as a system message", () => {
-    expect(toLoggedMessages("", [{ role: "user", type: "message", content: "hi" }])).toHaveLength(1);
-    const withInstructions = toLoggedMessages("be nice", [{ role: "user", type: "message", content: "hi" }]);
+    expect(toLoggedMessages("", [{ role: "user", content: "hi" }])).toHaveLength(1);
+    const withInstructions = toLoggedMessages("be nice", [{ role: "user", content: "hi" }]);
     expect(withInstructions).toHaveLength(2);
     expect(withInstructions[0]).toMatchObject({ role: "system", content: "be nice" });
   });
@@ -193,21 +186,11 @@ describe("step requests", () => {
 describe("input summary", () => {
   it("describes content without image bytes", () => {
     const summary = summarizeAgentInput([
-      userInputWithImage(`data:image/png;base64,${"q".repeat(100)}`),
-      {
-        role: "assistant",
-        type: "message",
-        content: "",
-        tool_calls: [{ id: "call-9", type: "function", function: { name: "set_cells", arguments: "{}" } }]
-      },
-      { type: "function_call", call_id: "call-9", name: "set_cells", arguments: "{}" },
-      { type: "function_call_output", call_id: "call-9", output: "{}" }
+      userInputWithImage("data:image/png;base64," + "q".repeat(100)),
+      { role: "assistant", content: [{ type: "tool-call", id: "call-9", callId: "call-9", name: "set_cells", arguments: "{}" }] }
     ]);
-
-    expect(summary[0]).toMatchObject({ kind: "message", role: "user", content: "input_text:4+input_image:122" });
-    expect(summary[1]).toMatchObject({ kind: "message", role: "assistant", toolCalls: ["call-9"] });
-    expect(summary[2]).toMatchObject({ kind: "function_call", callId: "call-9", name: "set_cells" });
-    expect(summary[3]).toMatchObject({ kind: "function_call_output", callId: "call-9" });
+    expect(summary[0]).toMatchObject({ kind: "message", role: "user", content: "text:4+image:122" });
+    expect(summary[1]).toMatchObject({ role: "assistant", toolCalls: ["call-9"] });
     expect(JSON.stringify(summary)).not.toContain("q".repeat(10));
   });
 });
@@ -313,7 +296,7 @@ describe("failure safety", () => {
       }
     };
     setAgentLogBackendForTesting(failing);
-    const event: AgentEvent = { type: "turn.start", turnId: "turn-fail" };
+    const event: AgentLogEvent = { type: "turn.start", turnId: "turn-fail" };
 
     await expect(logAgentEvent(event)).resolves.toBeUndefined();
     await expect(

@@ -1,24 +1,11 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { PatternPoint } from "@beadloom/core";
-import {
-  loadPatternLibraryFromLocalStorage,
-  savePatternLibraryToLocalStorage
-} from "@/lib/pattern-storage";
+import { loadPatternLibraryFromLocalStorage, savePatternLibraryToLocalStorage } from "@/lib/pattern-storage";
 import { clearPendingPrompt } from "./agent-debug-log";
 import { createChatSlice, initialChatState, type ChatSlice } from "./chat-slice";
-import {
-  createLibrarySlice,
-  emptyLibrary,
-  initialLibraryState,
-  type LibrarySlice
-} from "./library-slice";
-import {
-  defaultLlmSettings,
-  loadLlmSettings,
-  saveLlmSettings,
-  type LlmSettings
-} from "./llm-settings";
+import { createLibrarySlice, emptyLibrary, initialLibraryState, type LibrarySlice } from "./library-slice";
+import { defaultLlmSettings, loadLlmSettings, saveLlmSettings, type LlmSettings } from "./llm-settings";
 import type { EditorTool } from "./pattern-editor-utils";
 
 export type AppStoreState = LibrarySlice &
@@ -134,7 +121,7 @@ export const useAppStore = create<AppStoreState>()(
     },
     saveLlm: () => {
       saveLlmSettings(get().llm);
-      get().disposeAgent();
+      get().interruptChat();
       set({ settingsOpen: false });
     },
     setLibraryOpen: (open) => {
@@ -155,7 +142,12 @@ export const useAppStore = create<AppStoreState>()(
         set({ hydrated: true, llm, library, welcomeOpen: true });
         return;
       }
-      set({ hydrated: true, llm, library: stored, welcomeOpen: stored.patterns.length === 0 });
+      set({
+        hydrated: true,
+        llm,
+        library: stored,
+        welcomeOpen: stored.patterns.length === 0
+      });
     }
   }))
 );
@@ -174,6 +166,7 @@ if (typeof window !== "undefined") {
 }
 
 export function resetAppStore(): void {
+  useAppStore.getState().interruptChat();
   clearPendingPrompt();
   useAppStore.setState({
     ...initialLibraryState(),

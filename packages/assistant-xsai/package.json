@@ -1,0 +1,56 @@
+{
+  "name": "@beadloom/assistant-xsai",
+  "version": "0.1.0",
+  "description": "Browser xsAI adapter with assistant-ui local runtime and persistence",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./react": "./src/react.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./react": {
+        "types": "./dist/react.d.ts",
+        "import": "./dist/react.js"
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lulu0119/BeadLoom.git",
+    "directory": "packages/assistant-xsai"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@xsai/text": "1.0.0-beta.5",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "@assistant-ui/core": "^0.3.32",
+    "@assistant-ui/react": "^0.15.32",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@assistant-ui/core": "0.3.32",
+    "@assistant-ui/react": "0.15.32",
+    "@xsai/text-chat": "1.0.0-beta.5",
+    "react": "19.2.4",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.5"
+  }
+}

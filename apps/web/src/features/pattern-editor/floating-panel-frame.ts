@@ -18,9 +18,9 @@ export type PanelSizeLimits = {
 export type ResizeEdge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
 export const CHAT_MIN_WIDTH = 280;
-export const CHAT_MIN_HEIGHT = 160;
-export const CHAT_DEFAULT_WIDTH = 320;
-export const CHAT_DEFAULT_HEIGHT = 256;
+export const CHAT_MIN_HEIGHT = 280;
+export const CHAT_DEFAULT_WIDTH = 360;
+export const CHAT_DEFAULT_HEIGHT = 480;
 
 export const PALETTE_MIN_WIDTH = 240;
 export const PALETTE_MIN_HEIGHT = 200;

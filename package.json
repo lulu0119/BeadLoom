@@ -23,6 +23,7 @@
     "@xsai/generate-text": "0.4.4",
     "jpeg-js": "^0.4.4",
     "jsdom": "^27.4.0",
+    "pkg-pr-new": "0.0.93",
     "typescript": "^5.9.3",
     "vieval": "0.0.12",
     "vitest": "^4.0.16"

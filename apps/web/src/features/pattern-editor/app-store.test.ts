@@ -1,22 +1,9 @@
-import type { Agent, AgentEvent } from "@apeira/core";
 import { createBlankPattern } from "@beadloom/core";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n, { i18nInitialization } from "@/i18n/config";
-import {
-  PATTERN_LIBRARY_STORAGE_KEY,
-  type PatternLibraryDocument
-} from "@/lib/pattern-storage";
+import { PATTERN_LIBRARY_STORAGE_KEY, type PatternLibraryDocument } from "@/lib/pattern-storage";
 import { resetAppStore, useAppStore } from "./app-store";
-import { consumeAgentRun, createChartAgent } from "./chart-agent";
 import { LLM_SETTINGS_STORAGE_KEY } from "./llm-settings";
-
-vi.mock("./chart-agent", () => ({
-  createChartAgent: vi.fn(),
-  consumeAgentRun: vi.fn()
-}));
-
-const mockedCreateChartAgent = vi.mocked(createChartAgent);
-const mockedConsumeAgentRun = vi.mocked(consumeAgentRun);
 
 function storedLibrary(patterns: number): PatternLibraryDocument {
   return {
@@ -86,11 +73,18 @@ describe("hydrateApp", () => {
   it("loads stored llm settings", () => {
     localStorage.setItem(
       LLM_SETTINGS_STORAGE_KEY,
-      JSON.stringify({ apiKey: "sk-test", baseURL: "https://example.test/", model: "test-model" })
+      JSON.stringify({
+        apiKey: "sk-test",
+        baseURL: "https://example.test/",
+        model: "test-model"
+      })
     );
     useAppStore.getState().hydrateApp();
 
-    expect(useAppStore.getState().llm).toMatchObject({ apiKey: "sk-test", model: "test-model" });
+    expect(useAppStore.getState().llm).toMatchObject({
+      apiKey: "sk-test",
+      model: "test-model"
+    });
   });
 });
 
@@ -128,14 +122,15 @@ describe("library actions", () => {
     useAppStore.getState().addChart(createBlankPattern(2, 2));
     const secondId = useAppStore.getState().library.activePatternId!;
     useAppStore.getState().addChart(createBlankPattern(3, 3));
-    useAppStore.setState({ chatLines: [{ kind: "user", id: "u", text: "hi" }] });
+    const cancel = vi.fn();
+    useAppStore.setState({ cancelChat: cancel });
 
     useAppStore.getState().openPattern(secondId);
 
     const state = useAppStore.getState();
     expect(state.library.activePatternId).toBe(secondId);
     expect(state.library.patterns).toHaveLength(3);
-    expect(state.chatLines).toHaveLength(0);
+    expect(cancel).toHaveBeenCalledOnce();
     expect(state.welcomeOpen).toBe(false);
     expect(state.libraryOpen).toBe(false);
   });
@@ -242,140 +237,18 @@ describe("editor actions", () => {
   });
 });
 
-describe("chat actions", () => {
-  const fakeAgent = { init: async () => {}, interrupt: vi.fn(async () => "done") } as unknown as Agent;
-  let scriptedEvents: AgentEvent[] = [];
-
-  beforeEach(() => {
-    mockedCreateChartAgent.mockResolvedValue(fakeAgent);
-    mockedConsumeAgentRun.mockImplementation(async (_agent, _input, onEvent) => {
-      for (const event of scriptedEvents) {
-        onEvent(event);
-      }
-    });
-    useAppStore.getState().updateLlmField({ apiKey: "sk-test" });
-    useAppStore.getState().addChart(createBlankPattern(4, 4));
-  });
-
-  it("opens settings instead of sending without an api key", async () => {
-    useAppStore.getState().updateLlmField({ apiKey: "  " });
-
-    await useAppStore.getState().sendChatMessage("draw");
-
-    expect(useAppStore.getState().settingsOpen).toBe(true);
-    expect(mockedCreateChartAgent).not.toHaveBeenCalled();
-    expect(useAppStore.getState().chatLines).toHaveLength(0);
-  });
-
-  it("sends text and applies streamed events", async () => {
-    scriptedEvents = [
-      { type: "text.start", turnId: "t" },
-      { type: "text.delta", turnId: "t", delta: "hi" },
-      { type: "text.done", turnId: "t", content: "hi" },
-      { type: "tool-call.start", turnId: "t", toolCallId: "call-1", toolName: "look_at_board" },
-      {
-        type: "tool-call.done",
-        turnId: "t",
-        toolCallId: "call-1",
-        toolCallType: "function",
-        toolName: "look_at_board",
-        args: "{}"
-      },
-      {
-        type: "tool-result.done",
-        turnId: "t",
-        toolCallId: "call-1",
-        toolName: "look_at_board",
-        args: {},
-        result: "{}"
-      },
-      { type: "turn.done", turnId: "t" }
-    ];
-
-    await useAppStore.getState().sendChatMessage("draw");
-
-    const state = useAppStore.getState();
-    expect(state.chatBusy).toBe(false);
-    expect(state.chatLines.map((line) => line.kind)).toEqual(["user", "assistantText", "tool"]);
-    expect(state.chatLines[0]).toMatchObject({ kind: "user", text: "draw" });
-    expect(state.chatLines[1]).toMatchObject({ kind: "assistantText", text: "hi" });
-    expect(state.chatLines[2]).toMatchObject({ kind: "tool", status: "done", resultText: "{}" });
-  });
-
-  it("uses the default prompt for blank messages", async () => {
-    scriptedEvents = [{ type: "turn.done", turnId: "t" }];
-
-    await useAppStore.getState().sendChatMessage("   ");
-
-    expect(useAppStore.getState().chatLines[0]).toMatchObject({ text: i18n.t("chat.drawThis") });
-  });
-
-  it("records turn failures as error lines", async () => {
-    scriptedEvents = [{ type: "turn.failed", turnId: "t", error: new Error("boom") }];
-
-    await useAppStore.getState().sendChatMessage("draw");
-
-    const state = useAppStore.getState();
-    expect(state.chatBusy).toBe(false);
-    expect(state.chatLines.at(-1)).toMatchObject({ kind: "error", text: "boom" });
-  });
-
-  it("wires agent pattern access to the active record", async () => {
-    scriptedEvents = [{ type: "turn.done", turnId: "t" }];
-    await useAppStore.getState().sendChatMessage("draw");
-
-    const options = mockedCreateChartAgent.mock.calls[0][0];
-    expect(options.getPattern().width).toBe(4);
-    options.commitPattern(createBlankPattern(7, 7));
-    expect(useAppStore.getState().library.patterns[0].pattern.width).toBe(7);
-    expect(options.llm).toMatchObject({ apiKey: "sk-test" });
-  });
-
-  it("creates the agent once across sends", async () => {
-    scriptedEvents = [{ type: "turn.done", turnId: "t" }];
-
-    await useAppStore.getState().sendChatMessage("one");
-    await useAppStore.getState().sendChatMessage("two");
-
-    expect(mockedCreateChartAgent).toHaveBeenCalledTimes(1);
-  });
-
-  it("sends attached photos as image input", async () => {
-    scriptedEvents = [{ type: "turn.done", turnId: "t" }];
-    useAppStore.getState().attachFile(new File(["demo"], "octopus.png", { type: "image/png" }));
-
-    await useAppStore.getState().sendChatMessage("draw this");
-
-    const input = mockedConsumeAgentRun.mock.calls[0][1] as {
-      content: Array<{ type: string; image_url?: string }>;
-    };
-    const imagePart = input.content.find((part) => part.type === "input_image");
-    expect(imagePart?.image_url).toMatch(/^data:image\/png;base64,/);
-    expect(useAppStore.getState().attachedFile).toBeNull();
-  });
-
-  it("interrupts the running agent", async () => {
-    scriptedEvents = [{ type: "turn.done", turnId: "t" }];
-    await useAppStore.getState().sendChatMessage("draw");
-    useAppStore.setState({ chatBusy: true });
-
-    useAppStore.getState().interruptChat();
-
-    expect(fakeAgent.interrupt).toHaveBeenCalledWith("user interrupted");
-    expect(useAppStore.getState().chatBusy).toBe(false);
-  });
-});
-
 describe("resetAppStore", () => {
   it("restores pristine defaults", () => {
     useAppStore.getState().addChart(createBlankPattern(4, 4));
-    useAppStore.setState({ chatBusy: true, zoom: 2, settingsOpen: true });
+    const cancel = vi.fn();
+    useAppStore.setState({ cancelChat: cancel, zoom: 2, settingsOpen: true });
 
     resetAppStore();
 
     const state = useAppStore.getState();
     expect(state.library.patterns).toHaveLength(0);
-    expect(state.chatBusy).toBe(false);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(state.cancelChat).toBeNull();
     expect(state.zoom).toBe(1);
     expect(state.settingsOpen).toBe(false);
     expect(state.welcomeOpen).toBe(true);

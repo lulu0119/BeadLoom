@@ -1,4 +1,5 @@
 export type LlmSettings = {
+  providerId?: string;
   apiKey: string;
   baseURL: string;
   model: string;
@@ -7,6 +8,7 @@ export type LlmSettings = {
 export const LLM_SETTINGS_STORAGE_KEY = "beadloom.llm";
 
 export const defaultLlmSettings: LlmSettings = {
+  providerId: "zhipuai",
   apiKey: "",
   baseURL: "https://open.bigmodel.cn/api/paas/v4/",
   model: "glm-5.3-flash"
@@ -23,6 +25,7 @@ export function loadLlmSettings(): LlmSettings {
     }
     const parsed = JSON.parse(raw) as Partial<LlmSettings>;
     return {
+      providerId: typeof parsed.providerId === "string" ? parsed.providerId : "",
       apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
       baseURL: typeof parsed.baseURL === "string" && parsed.baseURL.length > 0 ? parsed.baseURL : defaultLlmSettings.baseURL,
       model: typeof parsed.model === "string" && parsed.model.length > 0 ? parsed.model : defaultLlmSettings.model

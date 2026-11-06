@@ -1,5 +1,11 @@
-import { createAgent, mem, run, tool, type Agent, type AgentEvent, type AgentInput, type Runner } from "@apeira/core";
-import { chat } from "@apeira/core/chat";
+import {
+  tool,
+  type StreamTextOptions,
+  type LanguageModel,
+  type Message,
+  type UserMessageContent
+} from "@xsai/text";
+import { chat } from "@xsai/text-chat";
 import {
   bucketFillPattern,
   buildLegend,
@@ -9,17 +15,9 @@ import {
 } from "@beadloom/core";
 import { defaultPalette } from "@beadloom/palettes";
 import { z } from "zod";
-import { installReadableStreamAsyncIterator } from "@/lib/install-readable-stream-async-iterator";
-import {
-  logStepRequest,
-  logTurnInput,
-  summarizeAgentInput,
-  toLoggedMessages
-} from "./agent-debug-log";
+import { logStepRequest, logTurnInput, summarizeAgentInput, toLoggedMessages } from "./agent-debug-log";
 import type { LlmSettings } from "./llm-settings";
 import { previewToDataUrl, renderBoardPreview, type BoardCrop } from "./look-at-board";
-
-installReadableStreamAsyncIterator();
 
 export type { LlmSettings };
 
@@ -27,8 +25,8 @@ export type ChartAgentOptions = {
   getPattern: () => PatternDocument;
   commitPattern: (pattern: PatternDocument) => void;
   llm: LlmSettings;
-  runner?: Runner;
-  onBoardPreview?: (previewUrl: string, toolCallId: string) => void;
+  fetch?: (request: Request) => Promise<Response>;
+  turnId?: string;
 };
 
 const paletteByCode = new Map(defaultPalette.map((color) => [color.code, color]));
@@ -63,21 +61,17 @@ function paletteUsage(pattern: PatternDocument) {
   }));
 }
 
-export async function createChartTools(
-  options: Pick<ChartAgentOptions, "getPattern" | "commitPattern"> & {
-    onBoardPreview?: (previewUrl: string, toolCallId: string) => void;
-  }
-) {
-  const lookAtBoard = await tool({
+export async function createChartTools(options: Pick<ChartAgentOptions, "getPattern" | "commitPattern">) {
+  const lookAtBoard = tool({
     name: "look_at_board",
     description: `${COORDINATE_NOTE} Returns a preview PNG of the bead board (optional crop) plus legend counts. No bead-code glyphs.`,
-    parameters: z.object({
+    inputSchema: z.object({
       column: z.number().int().optional(),
       row: z.number().int().optional(),
       width: z.number().int().optional(),
       height: z.number().int().optional()
     }),
-    execute: ({ column, row, width, height }, toolOptions) => {
+    execute: ({ column, row, width, height }) => {
       const pattern = options.getPattern();
       const crop: BoardCrop | undefined =
         column === undefined && row === undefined && width === undefined && height === undefined
@@ -98,25 +92,24 @@ export async function createChartTools(
         tickOrigin: "1-based on the image; tools stay 0-based",
         legend: preview.legend
       };
-      if (dataUrl !== null) {
-        options.onBoardPreview?.(dataUrl, toolOptions.toolCallId);
-      }
-      return JSON.stringify(meta);
+      return [
+        { type: "text" as const, text: JSON.stringify(meta) },
+        ...(dataUrl === null ? [] : [{ type: "image" as const, data: dataUrl }])
+      ];
     }
   });
 
-  const listPalette = await tool({
+  const listPalette = tool({
     name: "list_palette",
-    description:
-      "List every palette code with its hex and whether it is already used on the current board.",
-    parameters: z.object({}),
+    description: "List every palette code with its hex and whether it is already used on the current board.",
+    inputSchema: z.object({}),
     execute: () => JSON.stringify({ colors: paletteUsage(options.getPattern()) })
   });
 
-  const setCells = await tool({
+  const setCells = tool({
     name: "set_cells",
     description: `${COORDINATE_NOTE} Paint a batch of cells. code is a palette code or null to erase.`,
-    parameters: z.object({
+    inputSchema: z.object({
       cells: z.array(cellSchema)
     }),
     execute: ({ cells }) => {
@@ -129,10 +122,10 @@ export async function createChartTools(
     }
   });
 
-  const drawLine = await tool({
+  const drawLine = tool({
     name: "draw_line",
     description: `${COORDINATE_NOTE} Draw a straight line of palette code (or null to erase) from start to end.`,
-    parameters: z.object({
+    inputSchema: z.object({
       startColumn: z.number().int(),
       startRow: z.number().int(),
       endColumn: z.number().int(),
@@ -152,10 +145,10 @@ export async function createChartTools(
     }
   });
 
-  const fillArea = await tool({
+  const fillArea = tool({
     name: "fill_area",
     description: `${COORDINATE_NOTE} Flood-fill from a cell with a palette code.`,
-    parameters: z.object({
+    inputSchema: z.object({
       column: z.number().int(),
       row: z.number().int(),
       code: z.string()
@@ -176,147 +169,66 @@ ${COORDINATE_NOTE}
 Look at the board, draw with tools, look again, and stop when the chart is good enough.
 Call list_palette for real color codes. Each entry is used or unused on the current board. Never guess codes. Never dump the full grid as JSON.`;
 
-const maxAgentSteps = 20;
-
-function stopWhenToolsAreIdle({
-  step,
-  steps
-}: {
-  step: { toolCalls: readonly unknown[] };
-  steps: readonly unknown[];
-}): boolean {
-  if (steps.length > maxAgentSteps) {
-    return true;
-  }
-  return steps.length >= maxAgentSteps && step.toolCalls.length === 0;
-}
-
-function boardPreviewUserInput(previewDataUrls: string[]): AgentInput {
-  return {
-    role: "user",
-    type: "message",
-    content: [
-      {
-        type: "input_text",
-        text: "look_at_board preview. Image ticks are 1-based; tools stay 0-based."
-      },
-      ...previewDataUrls.map((imageUrl) => ({ type: "input_image" as const, image_url: imageUrl }))
-    ]
-  };
-}
-
-function withoutDeveloperRole(inputs: readonly AgentInput[]): AgentInput[] {
-  return inputs.map((input) =>
-    input.type === "message" && input.role === "developer"
-      ? { content: input.content, role: "system", type: "message" }
-      : input
-  );
-}
-
-export async function createChartAgent(options: ChartAgentOptions): Promise<Agent> {
-  const pendingBoardPreviews: string[] = [];
+export async function createChartRun(options: ChartAgentOptions): Promise<{
+  model: LanguageModel;
+  options: Omit<StreamTextOptions, "input" | "signal">;
+}> {
   const tools = await createChartTools({
     getPattern: options.getPattern,
-    commitPattern: options.commitPattern,
-    onBoardPreview: (previewUrl, toolCallId) => {
-      pendingBoardPreviews.push(previewUrl);
-      options.onBoardPreview?.(previewUrl, toolCallId);
-    }
+    commitPattern: options.commitPattern
   });
-  const normalizedBaseURL = options.llm.baseURL.endsWith("/") ? options.llm.baseURL : `${options.llm.baseURL}/`;
-  const innerRunner =
-    options.runner ??
-    chat({
-      apiKey: options.llm.apiKey,
-      baseURL: normalizedBaseURL,
-      headers: {
-        "x-opencode-session": crypto.randomUUID()
-      },
-      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = input instanceof URL ? input : new URL(String(input));
-        const useDevProxy =
-          process.env.NODE_ENV === "development" &&
-          typeof window !== "undefined" &&
-          url.origin !== window.location.origin;
-        const requestUrl = useDevProxy ? new URL("http://127.0.0.1:8787/") : url;
-        const requestInit = useDevProxy
-          ? {
-              ...init,
-              headers: (() => {
-                const headers = new Headers(init?.headers);
-                headers.set("x-llm-target", url.href);
-                return headers;
-              })()
-            }
-          : init;
-        return globalThis.fetch(requestUrl, requestInit);
-      },
-      model: options.llm.model,
-      stopWhen: stopWhenToolsAreIdle
-    });
-
-  const runner: Runner = async (context) => {
-    void logTurnInput(context.turnId, {
-      model: options.llm.model,
-      baseURL: normalizedBaseURL,
-      tools: context.tools.map((tool) => ({
-        name: tool.function.name,
-        description: tool.function.description ?? null
-      })),
-      summary: summarizeAgentInput(context.input)
-    });
-    return innerRunner({
-      ...context,
-      input: withoutDeveloperRole(context.input),
+  const baseURL = options.llm.baseURL.endsWith("/") ? options.llm.baseURL : options.llm.baseURL + "/";
+  const model = chat({ ...options.llm, baseURL, fetch: options.fetch });
+  return {
+    model: (request) => model({ ...request, input: boardImagesForChat(request.input) }),
+    options: {
+      instructions: INSTRUCTIONS,
+      tools,
       prepareStep: async (step) => {
-        const previewDataUrls = pendingBoardPreviews.splice(0);
-        const sanitizedStepInput = withoutDeveloperRole(step.input);
-        const input =
-          previewDataUrls.length === 0
-            ? sanitizedStepInput
-            : [...sanitizedStepInput, boardPreviewUserInput(previewDataUrls)];
-        void logStepRequest({
-          turnId: context.turnId,
-          stepNumber: step.stepNumber,
-          model: options.llm.model,
-          baseURL: normalizedBaseURL,
-          injectedPreviewCount: previewDataUrls.length,
-          messages: toLoggedMessages(
-            context.instructions,
-            previewDataUrls.length === 0 ? step.input : input
-          )
-        });
-        if (context.prepareStep != null) {
-          return context.prepareStep({ ...step, input });
-        }
-        if (previewDataUrls.length === 0) {
-          return {};
+        const input = [...step.input];
+        if (options.turnId) {
+          if (step.stepNumber === 0)
+            void logTurnInput(options.turnId, {
+              model: options.llm.model,
+              baseURL,
+              tools: tools.map((entry) => ({
+                name: entry.name,
+                description: entry.description ?? null
+              })),
+              summary: summarizeAgentInput(input)
+            });
+          void logStepRequest({
+            turnId: options.turnId,
+            stepNumber: step.stepNumber,
+            model: options.llm.model,
+            baseURL,
+            injectedPreviewCount: 0,
+            messages: toLoggedMessages(INSTRUCTIONS, input)
+          });
         }
         return { input };
       }
-    });
+    }
   };
-
-  return createAgent({
-    instructions: INSTRUCTIONS,
-    runner,
-    storage: mem(),
-    tools
-  });
 }
 
-export async function consumeAgentRun(agent: Agent, input: AgentInput, onEvent: (event: AgentEvent) => void): Promise<void> {
-  const stream = run(agent, input);
-  const reader = stream.getReader();
-  try {
-    while (true) {
-      const result = await reader.read();
-      if (result.done) {
-        return;
-      }
-      onEvent(result.value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
+// Chat Completions accepts board images in user messages, not tool messages.
+function boardImagesForChat(input: Message[] | string): Message[] | string {
+  if (typeof input === "string") return input;
+  return input.flatMap((message): Message[] => {
+    if (message.role !== "user" || typeof message.content === "string") return [message];
+    const images: UserMessageContent[] = [];
+    const content = message.content.map((part): UserMessageContent => {
+      if (part.type !== "tool-result" || typeof part.output === "string") return part;
+      images.push(...part.output.filter((item) => item.type === "image"));
+      return {
+        ...part,
+        output: part.output.filter((item) => item.type === "text")
+      };
+    });
+    return [
+      { role: "user", content },
+      ...(images.length ? [{ role: "user" as const, content: images }] : [])
+    ];
+  });
 }

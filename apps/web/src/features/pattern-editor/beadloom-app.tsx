@@ -38,12 +38,46 @@ import { useAppStore } from "./app-store";
 import { ChartChatPanel } from "./chart-chat-panel";
 import { ChartSizeGroup } from "./chart-size-group";
 import { ChartZoomGroup } from "./chart-zoom-group";
-import { DEFAULT_CHART_SIZE, parseChartDimension } from "./chart-size";
+import { parseChartDimension } from "./chart-size";
 import { ChartWelcome } from "./chart-welcome";
 import { LanguageSwitcher } from "./language-switcher";
 import { selectActivePattern, selectActiveRecord } from "./library-slice";
 import { PatternEditorWorkspace } from "./pattern-editor-workspace";
 import { PatternLibraryDialog } from "./pattern-library-dialog";
+import { ModelCatalog } from "./model-catalog";
+
+function ChartDimensions({
+  width,
+  height,
+  onResize
+}: {
+  width: number;
+  height: number;
+  onResize: (width: number, height: number) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const [widthDraft, setWidthDraft] = useState(String(width));
+  const [heightDraft, setHeightDraft] = useState(String(height));
+  return (
+    <ChartSizeGroup
+      groupLabel={t("sizeChip.aria")}
+      heightLabel={t("sizeChip.height")}
+      widthLabel={t("sizeChip.width")}
+      heightValue={heightDraft}
+      widthValue={widthDraft}
+      onHeightChange={setHeightDraft}
+      onWidthChange={setWidthDraft}
+      onCommit={() => {
+        const nextWidth = parseChartDimension(widthDraft);
+        const nextHeight = parseChartDimension(heightDraft);
+        if (nextWidth === null || nextHeight === null) {
+          setWidthDraft(String(width));
+          setHeightDraft(String(height));
+        } else if (nextWidth !== width || nextHeight !== height) onResize(nextWidth, nextHeight);
+      }}
+    />
+  );
+}
 
 export function BeadloomApp(): ReactElement {
   const { t } = useTranslation();
@@ -69,8 +103,6 @@ export function BeadloomApp(): ReactElement {
   const addImportedRecord = useAppStore((state) => state.addImportedRecord);
   const activeRecord = useAppStore(selectActiveRecord);
   const pattern = useAppStore(selectActivePattern);
-  const [widthDraft, setWidthDraft] = useState(String(DEFAULT_CHART_SIZE));
-  const [heightDraft, setHeightDraft] = useState(String(DEFAULT_CHART_SIZE));
 
   const showWelcome = hydrated && (welcomeOpen || activeRecord === null);
   const showEditor = hydrated && !showWelcome && activeRecord !== null && pattern !== null;
@@ -78,17 +110,6 @@ export function BeadloomApp(): ReactElement {
   useEffect(() => {
     useAppStore.getState().hydrateApp();
   }, []);
-
-  const patternWidth = pattern?.width;
-  const patternHeight = pattern?.height;
-
-  useEffect(() => {
-    if (patternWidth === undefined || patternHeight === undefined) {
-      return;
-    }
-    setWidthDraft(String(patternWidth));
-    setHeightDraft(String(patternHeight));
-  }, [patternHeight, patternWidth]);
 
   const paletteMapForExport = useMemo(() => new Map(defaultPalette.map((color) => [color.code, color])), []);
 
@@ -98,30 +119,28 @@ export function BeadloomApp(): ReactElement {
   }
 
   function handleNewChart(): void {
+    useAppStore.getState().interruptChat();
     setLibraryOpen(false);
     setWelcomeOpen(true);
   }
 
-  function commitSize(): void {
+  function commitSize(width: number, height: number): void {
     if (pattern === null) {
-      return;
-    }
-    const width = parseChartDimension(widthDraft);
-    const height = parseChartDimension(heightDraft);
-    if (width === null || height === null) {
-      setWidthDraft(String(pattern.width));
-      setHeightDraft(String(pattern.height));
       return;
     }
     if (width === pattern.width && height === pattern.height) {
       return;
     }
+    useAppStore.getState().interruptChat();
     persistPattern(resizePattern(pattern, width, height));
   }
 
-  const onAppStatus = useCallback((message: AppStatusMessage) => {
-    showAppStatusToast(t, message);
-  }, [t]);
+  const onAppStatus = useCallback(
+    (message: AppStatusMessage) => {
+      showAppStatusToast(t, message);
+    },
+    [t]
+  );
 
   async function handleExportPng(record: PatternRecord): Promise<void> {
     try {
@@ -140,152 +159,158 @@ export function BeadloomApp(): ReactElement {
   return (
     <TooltipProvider>
       <div className="relative min-h-0 flex-1 overflow-hidden">
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-30 p-[var(--chrome-inset)]">
-        <div className="glass-panel pointer-events-auto flex h-12 items-center justify-between gap-3 rounded-[var(--chrome-radius)] px-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Image alt={t("header.logoAlt")} height={28} src={publicPath("/android-chrome-192x192.png")} width={28} />
-            <h1 className="shrink-0 text-base font-semibold tracking-tight">{t("meta.title")}</h1>
+        <header className="pointer-events-none absolute inset-x-0 top-0 z-30 p-[var(--chrome-inset)]">
+          <div className="glass-panel pointer-events-auto flex h-12 items-center justify-between gap-3 rounded-[var(--chrome-radius)] px-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Image
+                alt={t("header.logoAlt")}
+                height={28}
+                src={publicPath("/android-chrome-192x192.png")}
+                width={28}
+              />
+              <h1 className="shrink-0 text-base font-semibold tracking-tight">{t("meta.title")}</h1>
+            </div>
+            <div className="flex h-8 min-w-0 shrink-0 items-center gap-1">
+              {showEditor ? (
+                <>
+                  {pattern && activeRecord ? (
+                    <ChartDimensions
+                      key={`${activeRecord.id}:${pattern.width}:${pattern.height}`}
+                      width={pattern.width}
+                      height={pattern.height}
+                      onResize={commitSize}
+                    />
+                  ) : null}
+                  <ChartZoomGroup zoom={zoom} onZoomChange={setZoom} />
+                </>
+              ) : null}
+              <Tooltip>
+                <TooltipTrigger
+                  aria-label={t("header.openLibrary")}
+                  className="hover:bg-accent hover:text-accent-foreground inline-flex size-8 items-center justify-center rounded-lg text-foreground transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                  type="button"
+                  onClick={() => setLibraryOpen(true)}
+                >
+                  <FolderOpen className="size-4" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{t("header.openLibrary")}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  aria-label={t("settings.open")}
+                  className="hover:bg-accent hover:text-accent-foreground inline-flex size-8 items-center justify-center rounded-lg text-foreground transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Settings className="size-4" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{t("settings.open")}</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
-          <div className="flex h-8 min-w-0 shrink-0 items-center gap-1">
-            {showEditor ? (
-              <>
-                <ChartSizeGroup
-                  groupLabel={t("sizeChip.aria")}
-                  heightLabel={t("sizeChip.height")}
-                  heightValue={heightDraft}
-                  widthLabel={t("sizeChip.width")}
-                  widthValue={widthDraft}
-                  onCommit={commitSize}
-                  onHeightChange={setHeightDraft}
-                  onWidthChange={setWidthDraft}
-                />
-                <ChartZoomGroup zoom={zoom} onZoomChange={setZoom} />
-              </>
-            ) : null}
-            <Tooltip>
-              <TooltipTrigger
-                aria-label={t("header.openLibrary")}
-                className="hover:bg-accent hover:text-accent-foreground inline-flex size-8 items-center justify-center rounded-lg text-foreground transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                type="button"
-                onClick={() => setLibraryOpen(true)}
-              >
-                <FolderOpen className="size-4" />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{t("header.openLibrary")}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                aria-label={t("settings.open")}
-                className="hover:bg-accent hover:text-accent-foreground inline-flex size-8 items-center justify-center rounded-lg text-foreground transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-              >
-                <Settings className="size-4" />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{t("settings.open")}</TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-      </header>
-      {showWelcome ? (
-        <ChartWelcome
-          canCancel={activeRecord !== null}
-          onCancel={() => setWelcomeOpen(false)}
-          onStartBlank={handleStartBlank}
+        </header>
+        {showWelcome ? (
+          <ChartWelcome
+            canCancel={activeRecord !== null}
+            onCancel={() => setWelcomeOpen(false)}
+            onStartBlank={handleStartBlank}
+          />
+        ) : null}
+        {showEditor && pattern !== null && activeRecord !== null ? (
+          <PatternEditorWorkspace pattern={pattern} onAppStatus={onAppStatus} overlay={<ChartChatPanel />} />
+        ) : null}
+        <PatternLibraryDialog
+          activePatternId={library.activePatternId}
+          open={libraryOpen}
+          patterns={library.patterns}
+          onNewChart={handleNewChart}
+          onDeletePattern={deletePattern}
+          onDuplicatePattern={duplicatePattern}
+          onExportJson={(patternId) => {
+            const record = library.patterns.find((entry) => entry.id === patternId);
+            if (record === undefined) {
+              return;
+            }
+            const json = exportPatternRecordToJson(record);
+            triggerBrowserDownload(
+              new Blob([json], { type: "application/json" }),
+              `${patternDownloadBasename(record.title)}.json`
+            );
+          }}
+          onExportPng={(patternId) => {
+            const record = library.patterns.find((entry) => entry.id === patternId);
+            if (record !== undefined) {
+              void handleExportPng(record);
+            }
+          }}
+          onImportJsonFile={async (file) => {
+            try {
+              const json = await file.text();
+              const record = importPatternRecordFromExportJson(json, createPatternRecordId);
+              addImportedRecord(record);
+              onAppStatus({ tone: "muted", key: "status.patternImported" });
+            } catch {
+              onAppStatus({ tone: "accent", key: "status.patternImportInvalid" });
+            }
+          }}
+          onOpenChange={setLibraryOpen}
+          onOpenPattern={openPattern}
+          onRenamePattern={renamePattern}
         />
-      ) : null}
-      {showEditor && pattern !== null && activeRecord !== null ? (
-        <PatternEditorWorkspace
-          pattern={pattern}
-          onAppStatus={onAppStatus}
-          overlay={<ChartChatPanel />}
-        />
-      ) : null}
-      <PatternLibraryDialog
-        activePatternId={library.activePatternId}
-        open={libraryOpen}
-        patterns={library.patterns}
-        onNewChart={handleNewChart}
-        onDeletePattern={deletePattern}
-        onDuplicatePattern={duplicatePattern}
-        onExportJson={(patternId) => {
-          const record = library.patterns.find((entry) => entry.id === patternId);
-          if (record === undefined) {
-            return;
-          }
-          const json = exportPatternRecordToJson(record);
-          triggerBrowserDownload(new Blob([json], { type: "application/json" }), `${patternDownloadBasename(record.title)}.json`);
-        }}
-        onExportPng={(patternId) => {
-          const record = library.patterns.find((entry) => entry.id === patternId);
-          if (record !== undefined) {
-            void handleExportPng(record);
-          }
-        }}
-        onImportJsonFile={async (file) => {
-          try {
-            const json = await file.text();
-            const record = importPatternRecordFromExportJson(json, createPatternRecordId);
-            addImportedRecord(record);
-            onAppStatus({ tone: "muted", key: "status.patternImported" });
-          } catch {
-            onAppStatus({ tone: "accent", key: "status.patternImportInvalid" });
-          }
-        }}
-        onOpenChange={setLibraryOpen}
-        onOpenPattern={openPattern}
-        onRenamePattern={renamePattern}
-      />
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent closeLabel={t("dialog.close")}>
-          <DialogHeader>
-            <DialogTitle>{t("settings.title")}</DialogTitle>
-            <DialogDescription>{t("settings.description")}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-5">
-            <section className="grid gap-2">
-              <h3 className="text-sm font-medium">{t("settings.language")}</h3>
-              <LanguageSwitcher />
-            </section>
-            <section className="grid gap-3 border-t border-primary/10 pt-4">
-              <div className="grid gap-1">
-                <h3 className="text-sm font-medium">{t("settings.agent")}</h3>
-                <p className="text-muted-foreground text-sm">{t("settings.agentDescription")}</p>
-              </div>
-              <Field>
-                <FieldLabel htmlFor="llm-base">{t("settings.baseURL")}</FieldLabel>
-                <Input
-                  id="llm-base"
-                  value={llm.baseURL}
-                  onChange={(event) => updateLlmField({ baseURL: event.currentTarget.value })}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="llm-model">{t("settings.model")}</FieldLabel>
-                <Input
-                  id="llm-model"
-                  value={llm.model}
-                  onChange={(event) => updateLlmField({ model: event.currentTarget.value })}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="llm-key">{t("settings.apiKey")}</FieldLabel>
-                <Input
-                  id="llm-key"
-                  type="password"
-                  value={llm.apiKey}
-                  onChange={(event) => updateLlmField({ apiKey: event.currentTarget.value })}
-                />
-              </Field>
-            </section>
-          </div>
-          <DialogFooter>
-            <Button type="button" onClick={saveLlm}>
-              {t("settings.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <DialogContent closeLabel={t("dialog.close")}>
+            <DialogHeader>
+              <DialogTitle>{t("settings.title")}</DialogTitle>
+              <DialogDescription>{t("settings.description")}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-5">
+              <section className="grid gap-2">
+                <h3 className="text-sm font-medium">{t("settings.language")}</h3>
+                <LanguageSwitcher />
+              </section>
+              <section className="grid gap-3 border-t border-primary/10 pt-4">
+                <div className="grid gap-1">
+                  <h3 className="text-sm font-medium">{t("settings.agent")}</h3>
+                  <p className="text-muted-foreground text-sm">{t("settings.agentDescription")}</p>
+                </div>
+                {settingsOpen ? <ModelCatalog /> : null}
+                <Field>
+                  <FieldLabel htmlFor="llm-base">{t("settings.baseURL")}</FieldLabel>
+                  <Input
+                    id="llm-base"
+                    value={llm.baseURL}
+                    onChange={(event) =>
+                      updateLlmField({ baseURL: event.currentTarget.value, providerId: "" })
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="llm-model">{t("settings.model")}</FieldLabel>
+                  <Input
+                    id="llm-model"
+                    list="llm-model-catalog"
+                    value={llm.model}
+                    onChange={(event) => updateLlmField({ model: event.currentTarget.value })}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="llm-key">{t("settings.apiKey")}</FieldLabel>
+                  <Input
+                    id="llm-key"
+                    type="password"
+                    value={llm.apiKey}
+                    onChange={(event) => updateLlmField({ apiKey: event.currentTarget.value })}
+                  />
+                </Field>
+              </section>
+            </div>
+            <DialogFooter>
+              <Button type="button" onClick={saveLlm}>
+                {t("settings.save")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );

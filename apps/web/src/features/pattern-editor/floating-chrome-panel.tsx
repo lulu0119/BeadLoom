@@ -96,7 +96,6 @@ export function FloatingChromePanel({
   const gestureRef = useRef<PanelGesture | null>(null);
   const [frame, setFrame] = useState<PanelFrame | null>(null);
   const limits: PanelSizeLimits = { minWidth, minHeight };
-  frameRef.current = frame;
 
   function captureFrame(): PanelFrame {
     if (frameRef.current !== null) {
@@ -171,6 +170,7 @@ export function FloatingChromePanel({
     width: frame?.width ?? defaultWidth,
     height: frame?.height ?? defaultHeight,
     maxWidth: "calc(100% - var(--chrome-inset) * 2)",
+    maxHeight: "calc(100% - var(--chrome-below-header) - var(--chrome-inset))",
     ...(frame === null
       ? defaultAnchor === "top-right"
         ? { top: "var(--chrome-below-header)", right: "var(--chrome-inset)" }

@@ -4,7 +4,7 @@
   "license": "AGPL-3.0-or-later",
   "private": true,
   "scripts": {
-    "dev": "node ./scripts/llm-dev-proxy.mjs",
+    "dev": "next dev",
     "build": "next build",
     "export": "next build",
     "start": "next start",
@@ -13,11 +13,14 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@apeira/core": "^0.0.7",
+    "@assistant-ui/react": "0.15.32",
+    "@beadloom/assistant-xsai": "workspace:*",
     "@beadloom/core": "workspace:*",
     "@beadloom/palettes": "workspace:*",
     "@beadloom/ui": "workspace:*",
     "@shadcn/react": "^0.3.1",
+    "@xsai/text": "1.0.0-beta.5",
+    "@xsai/text-chat": "1.0.0-beta.5",
     "i18next": "^25.7.3",
     "lucide-react": "^0.562.0",
     "next": "16.2.4",

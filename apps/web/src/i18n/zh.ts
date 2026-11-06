@@ -25,6 +25,14 @@ export const zh = {
     exportPngFailed: "PNG 导出失败。"
   },
   chat: {
+    sessions: "会话列表",
+    newSession: "新建会话",
+    renameSession: "重命名会话",
+    deleteSession: "删除会话",
+    sessionTitle: "会话标题",
+    saveFailed: "会话未能保存到浏览器，离开前请释放一些存储空间。",
+    attachedImageAlt: "参考照片",
+    reasoning: "思考过程",
     placeholder: "想画什么？",
     emptyHint: "对话",
     messages: "对话记录",
@@ -50,6 +58,10 @@ export const zh = {
     showPanel: "打开对话"
   },
   settings: {
+    provider: "模型服务商",
+    customProvider: "自定义 OpenAI 兼容接口",
+    catalogHint: "兼容 Chat Completions 的目录；地址为空时请手动填写，浏览器访问能力取决于服务商。",
+    catalogFailed: "目录加载失败，仍可手动填写接口地址和模型。",
     open: "设置",
     title: "设置",
     description: "只保存在本浏览器。",

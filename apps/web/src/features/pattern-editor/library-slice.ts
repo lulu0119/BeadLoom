@@ -8,13 +8,12 @@ import {
 import type { StateCreator } from "zustand";
 import type { AppStoreState } from "./app-store";
 import { clonePattern } from "./pattern-editor-utils";
+import { deleteChartChats } from "./chart-chat-storage";
 
 export type LibrarySlice = {
   library: PatternLibraryDocument;
   persistPattern: (next: PatternDocument) => void;
-  updateActivePattern: (
-    next: PatternDocument | ((previous: PatternDocument) => PatternDocument)
-  ) => void;
+  updateActivePattern: (next: PatternDocument | ((previous: PatternDocument) => PatternDocument)) => void;
   addChart: (pattern: PatternDocument) => void;
   openPattern: (patternId: string) => void;
   deletePattern: (patternId: string) => void;
@@ -81,6 +80,7 @@ export const createLibrarySlice: StateCreator<
     });
   },
   updateActivePattern: (next) => {
+    get().interruptChat();
     const pattern = selectActivePattern(get());
     if (pattern === null) {
       return;
@@ -89,7 +89,7 @@ export const createLibrarySlice: StateCreator<
   },
   addChart: (pattern) => {
     const record = createRecord(pattern, i18n.t("library.defaultTitle"));
-    get().resetChat();
+    get().interruptChat();
     set((state) => ({
       library: {
         version: 1,
@@ -100,7 +100,8 @@ export const createLibrarySlice: StateCreator<
     }));
   },
   openPattern: (patternId) => {
-    get().resetChat();
+    if (!get().library.patterns.some((record) => record.id === patternId)) return;
+    get().interruptChat();
     set((state) => ({
       library: { ...state.library, activePatternId: patternId },
       welcomeOpen: false,
@@ -108,8 +109,10 @@ export const createLibrarySlice: StateCreator<
     }));
   },
   deletePattern: (patternId) => {
+    get().interruptChat();
     const { library } = get();
     const patterns = library.patterns.filter((record) => record.id !== patternId);
+    void deleteChartChats(patternId);
     if (patterns.length === 0) {
       set({ library: emptyLibrary(), welcomeOpen: true });
       return;
@@ -129,6 +132,7 @@ export const createLibrarySlice: StateCreator<
     if (source === undefined) {
       return;
     }
+    get().interruptChat();
     const copy = createRecord(
       clonePattern(source.pattern),
       `${source.title} ${i18n.t("library.duplicatedTitleSuffix")}`
@@ -153,6 +157,7 @@ export const createLibrarySlice: StateCreator<
     }));
   },
   addImportedRecord: (record) => {
+    get().interruptChat();
     set((state) => ({
       library: {
         version: 1,

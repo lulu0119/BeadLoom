@@ -1,7 +1,16 @@
-import { toChat } from "@apeira/core/chat";
-import type { AgentEvent, AgentInput } from "@apeira/core";
+import type { Message, TextEvent, Usage } from "@xsai/text";
 
-export type LoggedChatMessage = ReturnType<typeof toChat>[number];
+export type AgentLogEvent =
+  | { type: "turn.start" | "turn.done" | "turn.aborted" | "step.start"; turnId: string }
+  | { type: "turn.failed"; turnId: string; error: unknown }
+  | { type: "step.done"; turnId: string; usage?: Usage }
+  | { type: "text.done" | "reasoning.done"; turnId: string; content: string }
+  | { type: "tool-call.start"; turnId: string; toolCallId: string; toolName: string }
+  | { type: "tool-call.done"; turnId: string; toolCallId: string; toolName: string; args: string }
+  | { type: "tool-result.done"; turnId: string; toolCallId: string; result: unknown; isError?: boolean }
+  | { type: "text.delta" | "tool-call.delta"; turnId: string; delta: string };
+
+export type LoggedChatMessage = StoredChatMessage;
 
 export const AGENT_LOG_KEEP_TURNS = 30;
 export const AGENT_LOG_KEEP_BLOBS = 300;
@@ -114,17 +123,16 @@ export function hashImageUrl(url: string): string {
   return `${(high >>> 0).toString(16).padStart(8, "0")}${(low >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-function isImageUrlPart(value: unknown): value is { type: "image_url"; image_url: { url: unknown; detail?: unknown } } {
+function isImageUrlPart(
+  value: unknown
+): value is { type: "image_url"; image_url: { url: unknown; detail?: unknown } } {
   if (typeof value !== "object" || value === null || !("type" in value) || value.type !== "image_url") {
     return false;
   }
   return "image_url" in value && typeof value.image_url === "object" && value.image_url !== null;
 }
 
-function extractImagesFromValue(
-  value: unknown,
-  blobs: Map<string, string>
-): unknown {
+function extractImagesFromValue(value: unknown, blobs: Map<string, string>): unknown {
   if (Array.isArray(value)) {
     return value.map((entry) => extractImagesFromValue(entry, blobs));
   }
@@ -192,27 +200,35 @@ function resolveImagesInValue(value: unknown, blobs: Map<string, string>): unkno
   return value;
 }
 
-export function resolveMessageImages(message: StoredChatMessage, blobs: Map<string, string>): StoredChatMessage {
+export function resolveMessageImages(
+  message: StoredChatMessage,
+  blobs: Map<string, string>
+): StoredChatMessage {
   return { ...message, content: resolveImagesInValue(message.content, blobs) };
 }
 
-export function toLoggedMessages(
-  instructions: string,
-  inputs: readonly AgentInput[]
-): LoggedChatMessage[] {
-  const prefix: LoggedChatMessage[] =
-    instructions === "" ? [] : [{ content: instructions, role: "system" }];
-  return [...prefix, ...toChat(inputs)];
+export function toLoggedMessages(instructions: string, inputs: readonly Message[]): LoggedChatMessage[] {
+  const prefix: LoggedChatMessage[] = instructions === "" ? [] : [{ content: instructions, role: "system" }];
+  const messages: LoggedChatMessage[] = inputs.map((input) => ({
+    role: input.role,
+    content:
+      typeof input.content === "string"
+        ? input.content
+        : input.content.map((part) =>
+            part.type === "image"
+              ? { type: "image_url", image_url: { url: String(part.data), detail: part.detail } }
+              : part
+          )
+  }));
+  return [...prefix, ...messages];
 }
 
 function describeContentPart(part: unknown): string {
   if (typeof part !== "object" || part === null || !("type" in part)) {
     return "unknown";
   }
-  const textLength =
-    "text" in part && typeof part.text === "string" ? part.text.length : null;
-  const imageLength =
-    "image_url" in part && typeof part.image_url === "string" ? part.image_url.length : null;
+  const textLength = "text" in part && typeof part.text === "string" ? part.text.length : null;
+  const imageLength = "data" in part && typeof part.data === "string" ? part.data.length : null;
   if (textLength !== null) {
     return `${String(part.type)}:${textLength}`;
   }
@@ -222,29 +238,19 @@ function describeContentPart(part: unknown): string {
   return String(part.type);
 }
 
-export function summarizeAgentInput(inputs: readonly AgentInput[]): TurnInputSummaryItem[] {
-  return inputs.map((input) => {
-    if (input.type === "function_call") {
-      return { kind: "function_call", callId: input.call_id, name: input.name };
-    }
-    if (input.type === "function_call_output") {
-      return { kind: "function_call_output", callId: input.call_id };
-    }
-    if (input.type !== "message") {
-      return { kind: typeof input.type === "string" ? input.type : "unknown" };
-    }
-    const content =
+export function summarizeAgentInput(inputs: readonly Message[]): TurnInputSummaryItem[] {
+  return inputs.map((input) => ({
+    kind: "message",
+    role: input.role,
+    content:
       typeof input.content === "string"
-        ? `text:${input.content.length}`
-        : input.content.map(describeContentPart).join("+");
-    const toolCalls =
-      "tool_calls" in input && Array.isArray(input.tool_calls)
-        ? input.tool_calls.map((call) =>
-            typeof call === "object" && call !== null && "id" in call ? String(call.id) : "unknown"
-          )
-        : null;
-    return { kind: "message", role: input.role, content, toolCalls };
-  });
+        ? "text:" + input.content.length
+        : input.content.map(describeContentPart).join("+"),
+    toolCalls:
+      typeof input.content === "string"
+        ? null
+        : input.content.filter((part) => part.type === "tool-call").map((part) => part.callId)
+  }));
 }
 
 export function createMemoryAgentLogBackend(): AgentLogBackend {
@@ -397,7 +403,7 @@ function resultTextOf(result: unknown): string {
   return JSON.stringify(result, null, 2) ?? String(result);
 }
 
-export async function logAgentEvent(event: AgentEvent): Promise<void> {
+export async function logAgentEvent(event: AgentLogEvent): Promise<void> {
   try {
     const backend = resolveBackend();
     const turnId = event.turnId;
@@ -463,7 +469,6 @@ export async function logAgentEvent(event: AgentEvent): Promise<void> {
           loggedAt: Date.now(),
           type: event.type,
           toolCallId: event.toolCallId,
-          toolName: event.toolName,
           resultText: resultTextOf(event.result),
           ...(event.isError === true ? { isError: true } : {})
         });
@@ -487,35 +492,40 @@ export async function logAgentEvent(event: AgentEvent): Promise<void> {
         await backend.prune(AGENT_LOG_KEEP_TURNS, AGENT_LOG_KEEP_BLOBS);
         break;
       }
-      case "error": {
-        await backend.addEvent({
-          turnId,
-          stepNumber: eventStepNumber(turnId),
-          loggedAt: Date.now(),
-          type: event.type,
-          error: event.message
-        });
-        break;
-      }
-      case "turn.queued":
-      case "turn.input_queued":
-      case "turn.input_drained":
-      case "agent.reset":
-      case "text.start":
       case "text.delta":
-      case "reasoning.start":
-      case "reasoning.delta":
-      case "tool-call.delta": {
-        // Queue markers and streaming deltas carry no evidence beyond the done events.
+      case "tool-call.delta":
         break;
-      }
       default: {
-        event satisfies never;
         break;
       }
     }
   } catch {
     // Logging must never break drawing.
+  }
+}
+
+export async function logXsaiEvent(turnId: string, event: TextEvent): Promise<void> {
+  if (event.type === "step.start") await logAgentEvent({ type: "step.start", turnId });
+  else if (event.type === "step.end") await logAgentEvent({ type: "step.done", turnId, usage: event.usage });
+  else if (event.type === "content.end") {
+    const part = event.content;
+    if (part.type === "text") await logAgentEvent({ type: "text.done", turnId, content: part.text });
+    else if (part.type === "tool-call")
+      await logAgentEvent({
+        type: "tool-call.done",
+        turnId,
+        toolCallId: part.callId,
+        toolName: part.name,
+        args: part.arguments
+      });
+    else if (part.type === "tool-result")
+      await logAgentEvent({
+        type: "tool-result.done",
+        turnId,
+        toolCallId: part.callId,
+        result: part.output,
+        isError: part.isError
+      });
   }
 }
 
@@ -587,10 +597,7 @@ export async function getTurnDetail(turnId: string): Promise<AgentTurnDetail | n
   if (turn === null) {
     return null;
   }
-  const [requests, events] = await Promise.all([
-    backend.listRequests(turnId),
-    backend.listEvents(turnId)
-  ]);
+  const [requests, events] = await Promise.all([backend.listRequests(turnId), backend.listEvents(turnId)]);
   const hashes = new Set<string>();
   for (const request of requests) {
     for (const hash of request.imageHashes) {

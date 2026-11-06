@@ -5,7 +5,7 @@ Guidance for agents working in **BeadLoom** (豆织工坊). Install and scripts:
 ## Product shape
 
 ```text
-Chat (Apeira + chart tools) ↔ Zustand store ↔ canvas HUD
+Chat (xsAI + headless assistant-ui + chart tools) ↔ Zustand store ↔ canvas HUD
  ↓
  @beadloom/core PatternDocument
  @beadloom/palettes defaultPalette
@@ -14,6 +14,7 @@ Chat (Apeira + chart tools) ↔ Zustand store ↔ canvas HUD
 | Path | Role |
 | --- | --- |
 | `apps/web` | Shippable product (editor, chat agent, browser persistence) |
+| `packages/assistant-xsai` | xsAI ChatModelAdapter and native assistant-ui runtime composition |
 | `packages/core` | `PatternDocument` and drawing ops |
 | `packages/palettes` | Bead colors |
 | `packages/ui` | Shared UI primitives |
@@ -24,6 +25,7 @@ When a domain term crystallizes, or a durable choice is made, use **domain-model
 
 - API keys stay in in-app settings (`beadloom.llm` localStorage), never in the repo.
 - Charts persist in this browser (`beadloom.patternLibrary`). No server store.
+- Chat sessions use assistant-ui's local-storage adapter under `beadloom.chatSessions:<chartId>:`. assistant-ui owns messages, thread CRUD, persistence, and run state; xsAI alone executes tools. Switching sessions or charts interrupts the active drawing turn.
 - Agent writes go through chart tools (`set_cells`, `draw_line`, `fill_area`) into `@beadloom/core`. Do not add a private write path.
 - Library, size, palette picker, and undo stay human. Do not expose them as agent tools.
 - Tool coordinates are 0-based `{column, row}`. Preview ticks are 1-based. Palette codes come from `@beadloom/palettes`; never invent codes.

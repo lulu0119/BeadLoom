@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    execArgv: ["--no-experimental-webstorage"],
+    environmentOptions: { jsdom: { url: "http://localhost:3000" } },
     globals: true,
     setupFiles: ["./src/test/setup.ts"]
   }

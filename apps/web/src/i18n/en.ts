@@ -26,6 +26,14 @@ export const en = {
     exportPngFailed: "PNG export failed."
   },
   chat: {
+    sessions: "Chat sessions",
+    newSession: "New chat",
+    renameSession: "Rename chat",
+    deleteSession: "Delete chat",
+    sessionTitle: "Chat title",
+    saveFailed: "Chat could not be saved in this browser. Free some storage before leaving.",
+    attachedImageAlt: "Reference photo",
+    reasoning: "Reasoning",
     placeholder: "What should we draw?",
     emptyHint: "Chat",
     messages: "Chat messages",
@@ -51,6 +59,10 @@ export const en = {
     showPanel: "Show chat"
   },
   settings: {
+    provider: "Provider",
+    customProvider: "Custom OpenAI-compatible endpoint",
+    catalogHint: "OpenAI-compatible catalog. Enter an endpoint when blank; browser access depends on the provider.",
+    catalogFailed: "Catalog unavailable. You can still enter an endpoint and model manually.",
     open: "Settings",
     title: "Settings",
     description: "These stay in this browser.",
