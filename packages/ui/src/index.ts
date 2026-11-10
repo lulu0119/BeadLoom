@@ -85,6 +85,7 @@ export {
   useMessageScrollerVisibility
 } from "./components/message-scroller";
 export { RadioGroup, RadioGroupItem } from "./components/radio-group";
+export { SearchableSelect, type SearchableSelectOption } from "./components/searchable-select";
 export {
   Select,
   SelectContent,

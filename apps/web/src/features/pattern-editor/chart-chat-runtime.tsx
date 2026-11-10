@@ -51,6 +51,7 @@ export function ChartChatRuntime({
         const config = await createChartRun({
           llm: { ...state.llm },
           turnId,
+          sessionId: run.unstable_threadId ?? run.messages[0]?.id,
           getPattern: () => {
             assertCurrent();
             const record = useAppStore.getState().library.patterns.find((entry) => entry.id === patternId);

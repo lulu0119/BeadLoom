@@ -1,0 +1,2 @@
+export const controlStyles: string =
+  "h-9 rounded-[var(--control-radius)] border-0 bg-control px-3 py-2 text-sm leading-5 text-foreground inset-ring-1 inset-ring-control-border outline-none transition-colors placeholder:text-muted-foreground focus-visible:inset-ring-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:inset-ring-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/40";

@@ -16,17 +16,29 @@ import {
   Bubble,
   BubbleContent,
   Button,
+  Input,
   Message,
   MessageContent,
   MessageScroller,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
-  MessageScrollerViewport
+  MessageScrollerViewport,
+  SearchableSelect
 } from "@beadloom/ui";
 import { useAppStore } from "./app-store";
 import { selectActiveRecord } from "./library-slice";
 import { ChartChatRuntime } from "./chart-chat-runtime";
+
+function ErrorBubble({ error }: { error: unknown }): ReactElement {
+  const { t } = useTranslation();
+  let text = t("chat.turnFailed");
+  if (typeof error === "object" && error !== null) {
+    if ("code" in error && error.code === "network-error") text = t("chat.networkFailed");
+    else if ("message" in error) text = String(error.message);
+  }
+  return <TextBubble error text={text} />;
+}
 
 function formatJsonPayload(raw: string): string {
   try {
@@ -107,7 +119,7 @@ function ToolBubble({ part, running }: { part: ToolCallMessagePart; running: boo
                     <img
                       src={part.artifact}
                       alt={t("chat.toolPreviewAlt")}
-                      className="h-auto w-full max-w-64 rounded-md border"
+                      className="h-auto w-full max-w-64 rounded-md"
                     />
                   </a>
                 )}
@@ -160,11 +172,17 @@ export function ChartChatContent(): ReactElement {
   const activeId = useAuiState((state) => state.threads.mainThreadId);
   const attachments = useAuiState((state) => state.composer.attachments);
   const active = sessions.find((entry) => entry.id === activeId);
+  const canManageSession = active !== undefined && active.status !== "new";
+  const sessionOptions = sessions
+    .filter((session) => session.status !== "archived")
+    .map((session) => ({ value: session.id, label: session.title ?? t("chat.newSession") }));
+  if (!active) sessionOptions.unshift({ value: activeId, label: t("chat.newSession") });
   const [renaming, setRenaming] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasApiKey = useAppStore((state) => state.llm.apiKey.trim() !== "");
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const newSession = (): void => {
+    setRenaming(false);
     aui.thread.cancelRun();
     aui.threads.switchToNewThread();
   };
@@ -203,25 +221,23 @@ export function ChartChatContent(): ReactElement {
         if (file?.type.startsWith("image/")) void aui.composer.addAttachment(file);
       }}
     >
-      <div className="border-primary/10 flex shrink-0 items-center gap-1 border-b px-2 py-2">
-        <select
+      <div className="flex shrink-0 items-center gap-1 px-3 py-2">
+        <SearchableSelect
+          id="chat-sessions"
           aria-label={t("chat.sessions")}
-          className="bg-transparent min-w-0 flex-1 truncate rounded-md px-1 py-1 text-xs outline-offset-2"
+          className="min-w-0 flex-1"
+          options={sessionOptions}
           value={activeId}
-          onChange={(event) => {
+          placeholder={t("chat.newSession")}
+          searchPlaceholder={t("chat.searchSessions")}
+          emptyText={t("chat.noSessions")}
+          onValueChange={(id) => {
+            if (id === activeId) return;
+            setRenaming(false);
             aui.thread.cancelRun();
-            aui.threads.switchToThread(event.currentTarget.value);
+            aui.threads.switchToThread(id);
           }}
-        >
-          {!active && <option value={activeId}>{t("chat.newSession")}</option>}
-          {sessions
-            .filter((session) => session.status !== "archived")
-            .map((session) => (
-              <option key={session.id} value={session.id}>
-                {session.title ?? t("chat.newSession")}
-              </option>
-            ))}
-        </select>
+        />
         <Button
           aria-label={t("chat.newSession")}
           size="icon"
@@ -233,6 +249,7 @@ export function ChartChatContent(): ReactElement {
         </Button>
         <Button
           aria-label={t("chat.renameSession")}
+          disabled={!canManageSession}
           size="icon"
           variant="ghost"
           type="button"
@@ -242,31 +259,36 @@ export function ChartChatContent(): ReactElement {
         </Button>
         <Button
           aria-label={t("chat.deleteSession")}
+          disabled={!canManageSession}
           size="icon"
           variant="ghost"
           type="button"
           onClick={() => {
+            const session = aui.threads.item("main");
+            if (session.getState().status === "new") return;
+            setRenaming(false);
             aui.thread.cancelRun();
-            aui.threads.item("main").delete();
+            session.delete();
           }}
         >
           <Trash2 className="size-3.5" />
         </Button>
       </div>
-      {renaming && (
+      {renaming && canManageSession && (
         <form
-          className="flex gap-2 px-3 py-2"
+          className="flex items-center gap-2 px-3 py-2"
           onSubmit={(event) => {
             event.preventDefault();
             const title = String(new FormData(event.currentTarget).get("title") ?? "").trim();
-            if (title) aui.threads.item("main").rename(title);
+            const session = aui.threads.item("main");
+            if (title && session.getState().status !== "new") session.rename(title);
             setRenaming(false);
           }}
         >
-          <input
+          <Input
             autoFocus
             aria-label={t("chat.sessionTitle")}
-            className="border-input min-w-0 flex-1 rounded border px-2 py-1 text-sm"
+            className="min-w-0 flex-1"
             name="title"
             defaultValue={active?.title ?? ""}
             maxLength={120}
@@ -298,16 +320,7 @@ export function ChartChatContent(): ReactElement {
                           />
                         ))}
                         {message.status.type === "incomplete" && message.status.reason === "error" && (
-                          <TextBubble
-                            error
-                            text={
-                              typeof message.status.error === "object" &&
-                              message.status.error !== null &&
-                              "message" in message.status.error
-                                ? String(message.status.error.message)
-                                : t("chat.turnFailed")
-                            }
-                          />
+                          <ErrorBubble error={message.status.error} />
                         )}
                       </>
                     ) : message.role === "user" ? (
@@ -322,7 +335,7 @@ export function ChartChatContent(): ReactElement {
                             key={index}
                             src={part.image}
                             alt={t("chat.attachedImageAlt")}
-                            className="ml-auto max-h-40 max-w-48 rounded-lg border object-contain"
+                            className="ml-auto max-h-40 max-w-48 rounded-lg object-contain"
                           />
                         ) : null
                       )
@@ -364,17 +377,17 @@ export function ChartChatContent(): ReactElement {
           </Button>
         </div>
       ))}
-      <ComposerPrimitive.Root className="border-primary/20 bg-card/45 relative m-[var(--chrome-pad)] flex flex-col gap-1 rounded-[var(--chrome-inner-radius)] border-2 p-[var(--chrome-pad)] backdrop-blur-md">
+      <ComposerPrimitive.Root className="bg-control relative m-[var(--chrome-gap)] flex flex-col gap-2 rounded-[calc(var(--chrome-radius)-var(--chrome-gap))] px-3 py-2 inset-ring-1 inset-ring-control-border focus-within:inset-ring-ring focus-within:ring-2 focus-within:ring-ring/20">
         <ComposerPrimitive.Unstable_TriggerPopoverRoot>
           <ComposerPrimitive.Input
-            className="field-sizing-fixed w-full resize-none bg-transparent px-1 py-1.5 text-sm outline-none"
+            className="field-sizing-fixed w-full resize-none bg-transparent p-0 text-sm leading-5 outline-none"
             placeholder={t("chat.placeholder")}
             rows={2}
           />
           <ComposerPrimitive.Unstable_TriggerPopover
             char="/"
             adapter={slash.adapter}
-            className="bg-popover absolute inset-x-0 bottom-full z-50 mb-2 rounded-lg border p-1 shadow-md"
+            className="bg-popover absolute inset-x-0 bottom-full z-50 mb-2 rounded-lg p-1 shadow-md"
           >
             <ComposerPrimitive.Unstable_TriggerPopover.Action {...slash.action} />
             <ComposerPrimitive.Unstable_TriggerPopoverItems>

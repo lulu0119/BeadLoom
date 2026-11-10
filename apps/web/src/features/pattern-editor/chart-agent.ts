@@ -17,6 +17,7 @@ import { defaultPalette } from "@beadloom/palettes";
 import { z } from "zod";
 import { logStepRequest, logTurnInput, summarizeAgentInput, toLoggedMessages } from "./agent-debug-log";
 import type { LlmSettings } from "./llm-settings";
+import { relayModelRequest } from "./model-transport";
 import { previewToDataUrl, renderBoardPreview, type BoardCrop } from "./look-at-board";
 
 export type { LlmSettings };
@@ -27,6 +28,7 @@ export type ChartAgentOptions = {
   llm: LlmSettings;
   fetch?: (request: Request) => Promise<Response>;
   turnId?: string;
+  sessionId?: string;
 };
 
 const paletteByCode = new Map(defaultPalette.map((color) => [color.code, color]));
@@ -178,7 +180,14 @@ export async function createChartRun(options: ChartAgentOptions): Promise<{
     commitPattern: options.commitPattern
   });
   const baseURL = options.llm.baseURL.endsWith("/") ? options.llm.baseURL : options.llm.baseURL + "/";
-  const model = chat({ ...options.llm, baseURL, fetch: options.fetch });
+  const isOpenCode = options.llm.providerId === "opencode-go" ||
+    options.llm.providerId === "opencode" || new URL(baseURL).hostname === "opencode.ai";
+  const model = chat({
+    ...options.llm,
+    baseURL,
+    fetch: options.fetch ?? relayModelRequest,
+    headers: isOpenCode ? { "x-opencode-session": options.sessionId } : undefined
+  });
   return {
     model: (request) => model({ ...request, input: boardImagesForChat(request.input) }),
     options: {

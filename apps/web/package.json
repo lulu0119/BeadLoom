@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "export": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
@@ -19,6 +18,7 @@
     "@beadloom/palettes": "workspace:*",
     "@beadloom/ui": "workspace:*",
     "@shadcn/react": "^0.3.1",
+    "@xsai-ext/providers": "https://pkg.pr.new/@xsai-ext/providers@336f9cc",
     "@xsai/text": "1.0.0-beta.5",
     "@xsai/text-chat": "1.0.0-beta.5",
     "i18next": "^25.7.3",

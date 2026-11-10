@@ -159,17 +159,24 @@ describe("BeadLoom editor shell", () => {
     expect(screen.queryByText(/drop a photo here/i)).not.toBeInTheDocument();
   });
 
-  it("steps chart zoom when zoom out and zoom in buttons are clicked", async () => {
+  it("changes chart zoom through the select and step buttons", async () => {
     const user = userEvent.setup();
     renderApp();
     await enterBlankChart();
     await waitFor(() => expect(patternCanvasMockContexts.length).toBeGreaterThan(0));
     const fontAt100 = patternCanvasMockContexts.at(-1)!.font;
 
+    const zoom = screen.getByRole("combobox", { name: /chart zoom/i });
+    expect(zoom).toHaveTextContent("100%");
+    await user.click(zoom);
+    await user.click(await screen.findByRole("option", { name: "150%" }));
+    expect(zoom).toHaveTextContent("150%");
+    await waitFor(() => expect(patternCanvasMockContexts.at(-1)!.font).not.toEqual(fontAt100));
+
     await user.click(screen.getByRole("button", { name: /^zoom out$/i }));
-    await waitFor(() => {
-      expect(patternCanvasMockContexts.at(-1)!.font).not.toEqual(fontAt100);
-    });
+    expect(zoom).toHaveTextContent("125%");
+    await user.click(screen.getByRole("button", { name: /^zoom in$/i }));
+    expect(zoom).toHaveTextContent("150%");
   });
 
   it("opens the library from the header and can start a new chart there", async () => {

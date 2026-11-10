@@ -14,9 +14,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Field,
-  FieldLabel,
-  Input,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -44,7 +41,7 @@ import { LanguageSwitcher } from "./language-switcher";
 import { selectActivePattern, selectActiveRecord } from "./library-slice";
 import { PatternEditorWorkspace } from "./pattern-editor-workspace";
 import { PatternLibraryDialog } from "./pattern-library-dialog";
-import { ModelCatalog } from "./model-catalog";
+import { LlmSettingsForm } from "./llm-settings-form";
 
 function ChartDimensions({
   width,
@@ -89,8 +86,6 @@ export function BeadloomApp(): ReactElement {
   const welcomeOpen = useAppStore((state) => state.welcomeOpen);
   const setWelcomeOpen = useAppStore((state) => state.setWelcomeOpen);
   const hydrated = useAppStore((state) => state.hydrated);
-  const llm = useAppStore((state) => state.llm);
-  const updateLlmField = useAppStore((state) => state.updateLlmField);
   const saveLlm = useAppStore((state) => state.saveLlm);
   const zoom = useAppStore((state) => state.zoom);
   const setZoom = useAppStore((state) => state.setZoom);
@@ -258,7 +253,7 @@ export function BeadloomApp(): ReactElement {
           onRenamePattern={renamePattern}
         />
         <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <DialogContent closeLabel={t("dialog.close")}>
+          <DialogContent closeLabel={t("dialog.close")} className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t("settings.title")}</DialogTitle>
               <DialogDescription>{t("settings.description")}</DialogDescription>
@@ -268,40 +263,12 @@ export function BeadloomApp(): ReactElement {
                 <h3 className="text-sm font-medium">{t("settings.language")}</h3>
                 <LanguageSwitcher />
               </section>
-              <section className="grid gap-3 border-t border-primary/10 pt-4">
+              <section className="grid gap-3 pt-2">
                 <div className="grid gap-1">
                   <h3 className="text-sm font-medium">{t("settings.agent")}</h3>
                   <p className="text-muted-foreground text-sm">{t("settings.agentDescription")}</p>
                 </div>
-                {settingsOpen ? <ModelCatalog /> : null}
-                <Field>
-                  <FieldLabel htmlFor="llm-base">{t("settings.baseURL")}</FieldLabel>
-                  <Input
-                    id="llm-base"
-                    value={llm.baseURL}
-                    onChange={(event) =>
-                      updateLlmField({ baseURL: event.currentTarget.value, providerId: "" })
-                    }
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="llm-model">{t("settings.model")}</FieldLabel>
-                  <Input
-                    id="llm-model"
-                    list="llm-model-catalog"
-                    value={llm.model}
-                    onChange={(event) => updateLlmField({ model: event.currentTarget.value })}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="llm-key">{t("settings.apiKey")}</FieldLabel>
-                  <Input
-                    id="llm-key"
-                    type="password"
-                    value={llm.apiKey}
-                    onChange={(event) => updateLlmField({ apiKey: event.currentTarget.value })}
-                  />
-                </Field>
+                {settingsOpen ? <LlmSettingsForm /> : null}
               </section>
             </div>
             <DialogFooter>

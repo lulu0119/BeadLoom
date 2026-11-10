@@ -62,7 +62,7 @@ const DrawerContent = React.forwardRef<
       data-slot="drawer-content"
       {...props}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-3xl border border-primary/20 bg-popover/80 text-popover-foreground ring-1 ring-primary/10 outline-none backdrop-blur-xl duration-100 data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-2 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom-2",
+        "fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-3xl bg-popover/80 text-popover-foreground shadow-lg outline-none backdrop-blur-xl duration-100 data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-2 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom-2",
         className
       )}
     >
@@ -86,7 +86,7 @@ function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="drawer-footer"
-      className={cn("mt-auto flex flex-col gap-2 border-t px-4 py-3", className)}
+      className={cn("mt-auto flex flex-col gap-2 px-4 py-3", className)}
       {...props}
     />
   );

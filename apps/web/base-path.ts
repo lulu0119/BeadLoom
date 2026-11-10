@@ -1,7 +1,4 @@
-/**
- * Mirrors `next.config.ts` so runtime URLs match static `basePath` / `assetPrefix`.
- * GitHub project Pages serves the app under `/<repo>/`; absolute `/file` misses that prefix.
- */
+/** Keep asset and API URLs aligned with the configured Next.js base path. */
 export function computePublicBasePath(): string {
   const raw = process.env.NEXT_PUBLIC_BASE_PATH?.trim() ?? "";
   if (raw === "") {

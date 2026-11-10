@@ -86,7 +86,7 @@ function PatternThumbnail({ pattern }: { pattern: PatternDocument }): ReactEleme
     canvas.style.height = `${Math.round(layout.height * fitScale)}px`;
   }, [paletteByCode, pattern]);
 
-  return <canvas className="border-primary/20 bg-card block shrink-0 rounded-lg border shadow-sm" ref={canvasRef} />;
+  return <canvas className="bg-card block shrink-0 rounded-lg" ref={canvasRef} />;
 }
 
 export function PatternLibraryDialog({
@@ -190,10 +190,10 @@ export function PatternLibraryDialog({
               {filteredSorted.map((record) => (
                 <li
                   className={cn(
-                    "flex flex-col gap-3 rounded-[var(--dialog-inner-radius)] border p-3 shadow-sm",
+                    "flex flex-col gap-3 rounded-[var(--dialog-inner-radius)] p-3",
                     record.id === activePatternId
-                      ? "border-primary/40 bg-primary/10"
-                      : "border-primary/15 bg-card/55 backdrop-blur-md"
+                      ? "bg-primary/15"
+                      : "bg-card/55 backdrop-blur-md"
                   )}
                   key={record.id}
                 >
@@ -216,7 +216,7 @@ export function PatternLibraryDialog({
                       </p>
                     </div>
                   </div>
-                  <div className="border-border flex flex-wrap gap-2 border-t pt-3">
+                  <div className="flex flex-wrap gap-2 pt-1">
                     <Button size="sm" type="button" variant="default" onClick={() => onOpenPattern(record.id)}>
                       {t("library.open")}
                     </Button>

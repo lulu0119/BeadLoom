@@ -3,8 +3,17 @@
 import type { ReactElement } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@beadloom/ui";
-import { CHART_ZOOM_STEPS, clampZoom, snapZoomToChartStep, stepChartZoom } from "./pattern-editor-utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from "@beadloom/ui";
+import { CHART_ZOOM_STEPS, snapZoomToChartStep, stepChartZoom } from "./pattern-editor-utils";
 
 type ChartZoomGroupProps = {
   zoom: number;
@@ -32,23 +41,27 @@ export function ChartZoomGroup({ zoom, onZoomChange }: ChartZoomGroupProps): Rea
         </TooltipTrigger>
         <TooltipContent side="bottom">{t("workspace.zoomOutTooltip")}</TooltipContent>
       </Tooltip>
-      <select
-        aria-label={t("workspace.chartZoom")}
-        className="h-7 min-w-12 shrink-0 cursor-pointer appearance-none border-0 bg-transparent px-0.5 text-center text-xs font-semibold outline-none"
-        value={String(zoom)}
-        onChange={(event) => {
-          const nextZoom = Number(event.currentTarget.value);
-          if (Number.isFinite(nextZoom)) {
-            onZoomChange(clampZoom(nextZoom));
-          }
+      <Select
+        value={zoom}
+        onValueChange={(value) => {
+          if (value !== null) onZoomChange(value);
         }}
       >
-        {CHART_ZOOM_STEPS.map((step) => (
-          <option key={step} value={String(step)}>
-            {Math.round(step * 100)}%
-          </option>
-        ))}
-      </select>
+        <SelectTrigger
+          aria-label={t("workspace.chartZoom")}
+          size="sm"
+          className="min-w-12 shrink-0 bg-transparent px-1 text-xs font-semibold inset-ring-0"
+        >
+          <SelectValue>{Math.round(zoom * 100)}%</SelectValue>
+        </SelectTrigger>
+        <SelectContent className="w-max min-w-(--anchor-width)" alignItemWithTrigger={false}>
+          {CHART_ZOOM_STEPS.map((step) => (
+            <SelectItem key={step} value={step}>
+              {Math.round(step * 100)}%
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <Tooltip>
         <TooltipTrigger
           aria-label={t("workspace.zoomIn")}

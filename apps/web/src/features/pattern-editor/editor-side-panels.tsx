@@ -59,7 +59,7 @@ export function EditorSidePanels({
                     <TooltipTrigger
                       aria-label={t("sidePanels.legendSelect", { code: item.code, count: item.count })}
                       aria-pressed={isActiveChip}
-                      className="border-border flex min-h-9 min-w-9 shrink-0 flex-col items-center justify-center gap-0 border-r px-1 py-0.5 text-center font-mono transition hover:brightness-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                      className="flex min-h-9 min-w-9 shrink-0 flex-col items-center justify-center gap-0 px-1 py-0.5 text-center font-mono transition hover:brightness-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                       style={{ backgroundColor: swatchHex, color: codeOnSwatchColor }}
                       type="button"
                       onClick={() => onActiveColorChange(item.code)}
@@ -74,7 +74,7 @@ export function EditorSidePanels({
                   <Tooltip>
                     <TooltipTrigger
                       aria-label={t("sidePanels.legendReplace", { fromCode: item.code, activeColor })}
-                      className="border-border text-primary hover:bg-accent hover:text-accent-foreground inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center border-r bg-card transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                      className="text-primary hover:bg-accent hover:text-accent-foreground inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center bg-card transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                       type="button"
                       onClick={() => onApplyReplace(item.code)}
                     >

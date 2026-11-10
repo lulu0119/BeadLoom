@@ -50,7 +50,7 @@ export function ChartSizeGroup({
       >
         <Input
           aria-label={widthLabel}
-          className="h-8 w-10 rounded-none border-0 bg-transparent px-0.5 text-center text-xs font-semibold shadow-none focus-visible:ring-0 md:text-xs"
+          className="h-8 w-10 rounded-none border-0 bg-transparent px-0.5 text-center text-xs font-semibold shadow-none inset-ring-0 focus-visible:ring-0 md:text-xs"
           inputMode="numeric"
           value={widthValue}
           onChange={(event) => onWidthChange(event.currentTarget.value)}
@@ -61,7 +61,7 @@ export function ChartSizeGroup({
         </span>
         <Input
           aria-label={heightLabel}
-          className="h-8 w-10 rounded-none border-0 bg-transparent px-0.5 text-center text-xs font-semibold shadow-none focus-visible:ring-0 md:text-xs"
+          className="h-8 w-10 rounded-none border-0 bg-transparent px-0.5 text-center text-xs font-semibold shadow-none inset-ring-0 focus-visible:ring-0 md:text-xs"
           inputMode="numeric"
           value={heightValue}
           onChange={(event) => onHeightChange(event.currentTarget.value)}

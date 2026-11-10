@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { I18nextProvider } from "react-i18next";
 import { createBlankPattern } from "@beadloom/core";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -59,10 +60,87 @@ afterEach(async () => {
 });
 
 describe("native assistant-ui chart sessions", () => {
-  it("creates, switches, renames, deletes and restores sessions through the published storage adapter", async () => {
+  it("only enables deletion and renaming for saved sessions", async () => {
+    const user = userEvent.setup();
+    panel();
+    const deleteButton = screen.getByRole("button", { name: i18n.t("chat.deleteSession") });
+    const renameButton = screen.getByRole("button", { name: i18n.t("chat.renameSession") });
+    expect(deleteButton).toBeDisabled();
+    expect(renameButton).toBeDisabled();
+    await user.click(deleteButton);
+    expect(mock.fetch).not.toHaveBeenCalled();
+
+    await send("Draw a cat");
+    await waitFor(() => expect(deleteButton).toBeEnabled());
+    expect(renameButton).toBeEnabled();
+    await user.click(renameButton);
+    expect(screen.getByLabelText(i18n.t("chat.sessionTitle"))).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: i18n.t("chat.newSession") }));
+    await waitFor(() => expect(deleteButton).toBeDisabled());
+    expect(renameButton).toBeDisabled();
+    expect(screen.queryByLabelText(i18n.t("chat.sessionTitle"))).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText(i18n.t("chat.sessions")));
+    await user.click(await screen.findByRole("option", { name: "Draw a cat" }));
+    await waitFor(() => expect(deleteButton).toBeEnabled());
+    expect(renameButton).toBeEnabled();
+    await user.click(deleteButton);
+    await waitFor(() => expect(deleteButton).toBeDisabled());
+    expect(renameButton).toBeDisabled();
+    expect(screen.queryByText("Done")).not.toBeInTheDocument();
+  });
+
+  it("keeps the OpenCode session header stable across turns and changes it for a new chat", async () => {
+    useAppStore.getState().updateLlmField({ providerId: "opencode-go" });
+    mock.fetch.mockImplementation(async () => answer(`Reply ${mock.fetch.mock.calls.length}`));
+    let view = panel();
+    for (const text of ["Draw a pig", "Make it pink"]) {
+      fireEvent.change(screen.getByPlaceholderText(i18n.t("chat.placeholder")), { target: { value: text } });
+      fireEvent.click(screen.getByRole("button", { name: i18n.t("chat.send") }));
+      await screen.findByText(`Reply ${text === "Draw a pig" ? 1 : 2}`);
+    }
+    const firstSession = mock.fetch.mock.calls[0][0].headers.get("x-opencode-session");
+    expect(firstSession).toBeTruthy();
+    expect(mock.fetch.mock.calls[1][0].headers.get("x-opencode-session")).toBe(firstSession);
+    view.unmount();
+    view = panel();
+    await screen.findByText("Reply 2");
+    fireEvent.change(screen.getByPlaceholderText(i18n.t("chat.placeholder")), { target: { value: "Continue" } });
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("chat.send") }));
+    await screen.findByText("Reply 3");
+    expect(mock.fetch.mock.calls[2][0].headers.get("x-opencode-session")).toBe(firstSession);
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("chat.newSession") }));
+    await waitFor(() => expect(screen.queryByText("Reply 3")).not.toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText(i18n.t("chat.placeholder")), { target: { value: "Draw a cat" } });
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("chat.send") }));
+    await screen.findByText("Reply 4");
+    expect(mock.fetch.mock.calls[3][0].headers.get("x-opencode-session")).toBeTruthy();
+    expect(mock.fetch.mock.calls[3][0].headers.get("x-opencode-session")).not.toBe(firstSession);
+    view.unmount();
+  });
+
+  it("explains a browser network failure without claiming the API key is wrong", async () => {
+    mock.fetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    panel();
+    fireEvent.change(screen.getByPlaceholderText(i18n.t("chat.placeholder")), { target: { value: "Draw a pig" } });
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("chat.send") }));
+    expect(await screen.findByText(/check your connection and whether the server is running/i)).toBeInTheDocument();
+  });
+
+  it("preserves the provider response for HTTP errors", async () => {
+    mock.fetch.mockResolvedValue(Response.json({ error: { message: "Invalid API key" } }, { status: 401 }));
+    panel();
+    fireEvent.change(screen.getByPlaceholderText(i18n.t("chat.placeholder")), { target: { value: "Draw a pig" } });
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("chat.send") }));
+    expect(await screen.findByText(/HTTP 401.*Invalid API key/)).toBeInTheDocument();
+    expect(screen.queryByText(/Could not connect to the model relay/i)).not.toBeInTheDocument();
+    expect(mock.fetch.mock.calls[0][0].headers.has("x-opencode-session")).toBe(false);
+  });
+
+  it("creates, searches, switches, renames, deletes and restores sessions through the published storage adapter", async () => {
+    const user = userEvent.setup();
     let view = panel();
     await send("Draw a cat");
-    const first = (screen.getByLabelText(i18n.t("chat.sessions")) as HTMLSelectElement).value;
+    await waitFor(() => expect(screen.getByLabelText(i18n.t("chat.sessions"))).toHaveTextContent("Draw a cat"));
     fireEvent.click(screen.getByRole("button", { name: i18n.t("chat.newSession") }));
     await waitFor(() =>
       expect(
@@ -70,14 +148,13 @@ describe("native assistant-ui chart sessions", () => {
       ).not.toBeInTheDocument()
     );
     await send("Draw a tree");
-    const second = (screen.getByLabelText(i18n.t("chat.sessions")) as HTMLSelectElement).value;
-    expect(second).not.toBe(first);
+    await waitFor(() => expect(screen.getByLabelText(i18n.t("chat.sessions"))).toHaveTextContent("Draw a tree"));
     fireEvent.click(screen.getByRole("button", { name: i18n.t("chat.renameSession") }));
     fireEvent.change(screen.getByLabelText(i18n.t("chat.sessionTitle")), {
       target: { value: "Tree" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(screen.getByRole("option", { name: "Tree" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText(i18n.t("chat.sessions"))).toHaveTextContent("Tree"));
     view.unmount();
     view = panel();
     await waitFor(() =>
@@ -85,9 +162,14 @@ describe("native assistant-ui chart sessions", () => {
         screen.getByText("Draw a tree", { selector: '[data-slot="bubble-content"]' })
       ).toBeInTheDocument()
     );
-    fireEvent.change(screen.getByLabelText(i18n.t("chat.sessions")), {
-      target: { value: first }
-    });
+    await user.click(screen.getByLabelText(i18n.t("chat.sessions")));
+    const search = await screen.findByPlaceholderText(i18n.t("chat.searchSessions"));
+    await user.type(search, "no matching title");
+    expect(await screen.findByText(i18n.t("chat.noSessions"))).toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, "cat");
+    expect(screen.queryByRole("option", { name: "Tree" })).not.toBeInTheDocument();
+    await user.keyboard("{ArrowDown}{Enter}");
     await waitFor(() =>
       expect(screen.getByText("Draw a cat", { selector: '[data-slot="bubble-content"]' })).toBeInTheDocument()
     );
